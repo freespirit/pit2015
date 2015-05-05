@@ -2,19 +2,12 @@ package trifonov.stanislav.textmining;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.Reader;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import com.xeiam.xchart.BitmapEncoder;
 import com.xeiam.xchart.Chart;
@@ -26,8 +19,6 @@ import com.xeiam.xchart.StyleManager.LegendPosition;
 
 import opennlp.tools.stemmer.PorterStemmer;
 import opennlp.tools.stemmer.Stemmer;
-import opennlp.tools.tokenize.SimpleTokenizer;
-import opennlp.tools.util.HashList;
 
 /**
  * A system that solves Semeval 2015 Task 1 - Paraphrase and Semantic Similarity in Twitter (PIT-2015)
@@ -78,18 +69,18 @@ public class PIT2015 {
 	private void train() throws IOException {
 		BufferedReader reader = null;
 		long start = System.currentTimeMillis();
+		String line = null;
+		String s1, s2, label, s1tag, s2tag;
+		String columns[];
+		List<Map<String, Double>> allItemsFeatures = new ArrayList<Map<String,Double>>();
+		List<Integer> paraphraseLabels = new ArrayList<Integer>();
+		String featureName = null;
+		double featureValue = 0.0;
+		Map<String, Double> maxFeatureValues = new HashMap<String, Double>();
+		Map<String, Double> minFeatureValues = new HashMap<String, Double>();
+		
 		try {
 			reader = new BufferedReader(new FileReader(_fileTrain));
-			String line = null;
-			String s1, s2, label, s1tag, s2tag;
-			String columns[];
-			List<Map<String, Double>> allItemsFeatures = new ArrayList<Map<String,Double>>();
-			List<Integer> paraphraseLabels = new ArrayList<Integer>();
-			String featureName = null;
-			double featureValue = 0.0;
-			Map<String, Double> maxFeatureValues = new HashMap<String, Double>();
-			Map<String, Double> minFeatureValues = new HashMap<String, Double>();
-
 			while( (line=reader.readLine()) != null ) {
 				columns = line.split("\t");
 				
@@ -99,14 +90,13 @@ public class PIT2015 {
 				s1tag = columns[5];
 				s2tag = columns[6];
 				
-//				for(String c : columns)
-//					System.out.println(c);
+				Map<String, Double> pairFeatures = new HashMap<String, Double>();				
+				pairFeatures.putAll( nGramsOverlap(s1tag, s2tag) );
 				
-				Map<String, Double> features = nGramsOverlap(s1, s2);
-				allItemsFeatures.add( features );
+				allItemsFeatures.add( pairFeatures );
 				paraphraseLabels.add( LABEL_TYPE.get(label) );
 				
-				for(Map.Entry<String, Double> entry : features.entrySet()) {
+				for(Map.Entry<String, Double> entry : pairFeatures.entrySet()) {
 					featureName = entry.getKey();
 					featureValue = entry.getValue().doubleValue();
 //					System.out.println(featureName + ": " + featureValue);
@@ -119,8 +109,6 @@ public class PIT2015 {
 							minFeatureValues.get(featureName) > featureValue)
 						minFeatureValues.put(featureName, Double.valueOf(featureValue));
 				}
-				
-//				break;
 			}
 			
 			long end = System.currentTimeMillis();
@@ -131,6 +119,7 @@ public class PIT2015 {
 //				System.out.println("max " + entry.getKey() + " = " + entry.getValue());
 //			for(Map.Entry<String, Double> entry : minFeatureValues.entrySet())
 //				System.out.println("min " + entry.getKey() + " = " + entry.getValue());
+			
 			
 			start = System.currentTimeMillis();
 			
@@ -193,11 +182,18 @@ public class PIT2015 {
 	 * Computes features based on 1,2 and 3-grams overlapping.
 	 * Implements the given baseline (linear regression of simple semantic features).
 	 */
-	private Map<String, Double> nGramsOverlap(String s1, String s2) {
-		SimpleTokenizer tokenizer = SimpleTokenizer.INSTANCE;
-
-		String s11grams[] = tokenizer.tokenize(s1);
-		String s21grams[] = tokenizer.tokenize(s2);
+	private Map<String, Double> nGramsOverlap(String s1Tag, String s2Tag) {
+		String tags[] = s1Tag.split(" ");
+		
+		String s11grams[] = new String[tags.length];
+		for(int i=0; i<tags.length; ++i)
+			s11grams[i] = tags[i].substring(0, tags[i].indexOf('/'));
+		
+		tags = s2Tag.split(" ");
+		String s21grams[] = new String[tags.length];
+		for(int i=0; i<tags.length; ++i)
+			s21grams[i] = tags[i].substring(0, tags[i].indexOf('/'));
+		
 		
 		Stemmer stemmer = new PorterStemmer();
 		List<String> s11stems = new ArrayList<String>();
@@ -207,6 +203,7 @@ public class PIT2015 {
 			s11stems.add( stemmer.stem(word).toString() );
 		for(String word : s21grams)
 			s21stems.add( stemmer.stem(word).toString() );
+		
 		
 		Map<String, Double> features = new HashMap<String, Double>();
 		
@@ -256,7 +253,7 @@ public class PIT2015 {
 		
 		
 		/*for(int i=0; i<s1Words.length; ++i)
-			System.out.print(s1Words[i] + " ");
+			System.out.print(s1Words[i] + "; ");
 		System.out.println();
 		for(int i=0; i<s12grams.size(); ++i)
 			System.out.print(s12grams.get(i) + "; ");
@@ -310,8 +307,10 @@ public class PIT2015 {
 	}
 	
 	
-	private void wordOrderSimilarity() {
+	private Map<String, Double> wordOrderSimilarityFeatures() {
+		Map<String, Double> result = new HashMap<String, Double>();
 		
+		return result;
 	}
 	
 	/**
