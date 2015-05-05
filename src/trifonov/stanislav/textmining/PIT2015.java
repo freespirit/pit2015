@@ -5,9 +5,14 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
+import org.apache.commons.math3.stat.regression.RegressionResults;
+import org.apache.commons.math3.stat.regression.SimpleRegression;
 
 import com.xeiam.xchart.BitmapEncoder;
 import com.xeiam.xchart.Chart;
@@ -28,22 +33,30 @@ import opennlp.tools.stemmer.Stemmer;
  */
 public class PIT2015 {
 
+	public static class FeatureMap extends HashMap<String, Double> {
+		private static final long serialVersionUID = 1L;
+	}
+	
 	public static final String FILENAME_TRAIN = "train.data";
 	public static final String FILENAME_DEV = "dev.data";
+	public static final String FILENAME_TEST = "test.data";
 	public static final String FILENAME_TOKENIZER_MODEL = "en-token.bin";
 	public static final String DIRNAME_DATA = "../SemEval-PIT2015-github/data";
 
-	public static final int PARAPHRASE_NONE = -1;
-	public static final int PARAPHRASE_DEBATABLE = 0;
-	public static final int PARAPHRASE = 1;
+	public static final double PARAPHRASE_NONE = 0;
+	public static final double PARAPHRASE_DEBATABLE = 0.5;
+	public static final double PARAPHRASE = 1;
 	
-	public static final Map<String, Integer> LABEL_TYPE = new HashMap<String, Integer>();
+	public static final FeatureMap LABEL_TYPE = new FeatureMap();
     
     
 	private final File _fileTrain;
+	private final File _fileTest;
+	private final SimpleRegression _simpleRegression = new SimpleRegression();
 	
 	private PIT2015() {
 		_fileTrain = new File(DIRNAME_DATA, FILENAME_TRAIN);
+		_fileTest = new File(DIRNAME_DATA, FILENAME_TEST);
 
 		LABEL_TYPE.put("(3, 2)", PARAPHRASE);
 		LABEL_TYPE.put("(4, 1)", PARAPHRASE);
@@ -59,25 +72,43 @@ public class PIT2015 {
 
 		PIT2015 pit2015 = new PIT2015();
 		try {
-			pit2015.train();
+			pit2015.train(true);
 		} catch (IOException e) {
 			System.out.println("Training failed: " + e.getMessage());
 			e.printStackTrace();
 		}
 	}
 	
-	private void train() throws IOException {
+	private void feed(double data[], double label) {
+		_simpleRegression.addObservation(data, label);
+	}
+	private double estimate(double data[]) {
+		double prediction = 0;
+		int offset = 0;
+		RegressionResults regressionResults = _simpleRegression.regress();
+		if(regressionResults.hasIntercept()) {
+			offset = 1;
+			prediction += regressionResults.getParameterEstimate(0);
+		}
+		for (int i = 0; i < data.length; i++)
+			prediction += regressionResults.getParameterEstimate(i+offset) * data[i];
+
+		return prediction;
+	}
+	
+	private void train(boolean exportFeaturesCharts) throws IOException {
 		BufferedReader reader = null;
 		long start = System.currentTimeMillis();
 		String line = null;
 		String s1, s2, label, s1tag, s2tag;
 		String columns[];
-		List<Map<String, Double>> allItemsFeatures = new ArrayList<Map<String,Double>>();
-		List<Integer> paraphraseLabels = new ArrayList<Integer>();
+		List<FeatureMap> allItemsFeatures = new ArrayList<FeatureMap>();
+		List<Double> paraphraseLabels = new ArrayList<Double>();
 		String featureName = null;
 		double featureValue = 0.0;
-		Map<String, Double> maxFeatureValues = new HashMap<String, Double>();
-		Map<String, Double> minFeatureValues = new HashMap<String, Double>();
+		FeatureMap maxFeatureValues = new FeatureMap();
+		FeatureMap minFeatureValues = new FeatureMap();
+		String sortedFeatureKeys[] = null;
 		
 		try {
 			reader = new BufferedReader(new FileReader(_fileTrain));
@@ -89,12 +120,24 @@ public class PIT2015 {
 				label = columns[4];
 				s1tag = columns[5];
 				s2tag = columns[6];
-				
-				Map<String, Double> pairFeatures = new HashMap<String, Double>();				
+				double isParaphrase = LABEL_TYPE.get(label);
+				FeatureMap pairFeatures = new FeatureMap();				
 				pairFeatures.putAll( nGramsOverlap(s1tag, s2tag) );
 				
 				allItemsFeatures.add( pairFeatures );
-				paraphraseLabels.add( LABEL_TYPE.get(label) );
+				paraphraseLabels.add( isParaphrase );
+				
+				if(sortedFeatureKeys == null) {
+					Set<String> keysSet = pairFeatures.keySet();
+					sortedFeatureKeys = keysSet.toArray( new String[keysSet.size()] );
+					Arrays.sort(sortedFeatureKeys);
+				}
+
+				double x[] = new double[sortedFeatureKeys.length];
+				for (int i = 0; i < sortedFeatureKeys.length; i++)
+					x[i] = pairFeatures.get(sortedFeatureKeys[i]).doubleValue();
+				feed(x, isParaphrase);
+				
 				
 				for(Map.Entry<String, Double> entry : pairFeatures.entrySet()) {
 					featureName = entry.getKey();
@@ -121,57 +164,73 @@ public class PIT2015 {
 //				System.out.println("min " + entry.getKey() + " = " + entry.getValue());
 			
 			
-			start = System.currentTimeMillis();
-			
-			File chartsDir = new File("featuresCharts");
-			chartsDir.mkdirs();
-			
-			for(String key : maxFeatureValues.keySet()) {
-				List<Double> featureValuesForParaphrases = new ArrayList<Double>();
-				List<Double> featureValuesForNonparaphrases = new ArrayList<Double>();
-				
-				for(int i=0; i<allItemsFeatures.size(); ++i) {
-					Map<String,Double> featureMap = allItemsFeatures.get(i);
-					if(paraphraseLabels.get(i) == PARAPHRASE)
-						featureValuesForParaphrases.add(featureMap.get(key));
-					else if(paraphraseLabels.get(i) == PARAPHRASE_NONE)
-						featureValuesForNonparaphrases.add(featureMap.get(key));
-				}
-				
-				Histogram hParaphrases = new Histogram(
-						featureValuesForParaphrases,
-						100,
-						minFeatureValues.get(key),
-						maxFeatureValues.get(key));
-				Histogram hNonparaphrases = new Histogram(
-						featureValuesForNonparaphrases,
-						100,
-						minFeatureValues.get(key),
-						maxFeatureValues.get(key));
-				
-				Chart chart = new ChartBuilder()
-							.chartType(ChartType.Bar)
-							.width(800)
-							.height(600)
-							.title("Feature: " + key)
-							.xAxisTitle(key)
-							.yAxisTitle("Sentence pairs")
-							.build();
-				chart.addSeries("Paraphrases", hParaphrases.getxAxisData(), hParaphrases.getyAxisData());
-				chart.addSeries("Non paraphrases", hNonparaphrases.getxAxisData(), hNonparaphrases.getyAxisData());
-				chart.getStyleManager().setLegendPosition(LegendPosition.InsideNE);
-				chart.getStyleManager().setBarsOverlapped(true);
-	
-				BitmapEncoder.saveBitmap(chart,
-						new File(chartsDir, key).getAbsolutePath(),
-						BitmapFormat.PNG);
+			if(exportFeaturesCharts) {
+				exportFeaturesCharts(allItemsFeatures, maxFeatureValues, minFeatureValues, paraphraseLabels);
 			}
-			end = System.currentTimeMillis();
-			System.out.println("Exporting features charts took " + (end-start) + "ms.");
 		}
 		finally {
 			reader.close();
 		}
+		
+	}
+	
+	public void test() {
+//		for (int i = 0; i < sortedFeatureKeys.length; i++) {
+//			
+//		}		
+	}
+	
+	private void exportFeaturesCharts(
+			List<FeatureMap> allItemsFeatures,
+			FeatureMap maxFeatureValues,
+			FeatureMap minFeatureValues,
+			List<Double> paraphraseLabels) throws IOException {
+		
+		long start = System.currentTimeMillis();
+		File chartsDir = new File("featuresCharts");
+		chartsDir.mkdirs();
+		for(String key : maxFeatureValues.keySet()) {
+			List<Double> featureValuesForParaphrases = new ArrayList<Double>();
+			List<Double> featureValuesForNonparaphrases = new ArrayList<Double>();
+			
+			for(int i=0; i<allItemsFeatures.size(); ++i) {
+				Map<String,Double> featureMap = allItemsFeatures.get(i);
+				if(paraphraseLabels.get(i) == PARAPHRASE)
+					featureValuesForParaphrases.add(featureMap.get(key));
+				else if(paraphraseLabels.get(i) == PARAPHRASE_NONE)
+					featureValuesForNonparaphrases.add(featureMap.get(key));
+			}
+			
+			Histogram hParaphrases = new Histogram(
+					featureValuesForParaphrases,
+					100,
+					minFeatureValues.get(key),
+					maxFeatureValues.get(key));
+			Histogram hNonparaphrases = new Histogram(
+					featureValuesForNonparaphrases,
+					100,
+					minFeatureValues.get(key),
+					maxFeatureValues.get(key));
+			
+			Chart chart = new ChartBuilder()
+						.chartType(ChartType.Bar)
+						.width(800)
+						.height(600)
+						.title("Feature: " + key)
+						.xAxisTitle(key)
+						.yAxisTitle("Sentence pairs")
+						.build();
+			chart.addSeries("Paraphrases", hParaphrases.getxAxisData(), hParaphrases.getyAxisData());
+			chart.addSeries("Non paraphrases", hNonparaphrases.getxAxisData(), hNonparaphrases.getyAxisData());
+			chart.getStyleManager().setLegendPosition(LegendPosition.InsideNE);
+			chart.getStyleManager().setBarsOverlapped(true);
+
+			BitmapEncoder.saveBitmap(chart,
+					new File(chartsDir, key).getAbsolutePath(),
+					BitmapFormat.PNG);
+		}
+		long end = System.currentTimeMillis();
+		System.out.println("Exporting features charts took " + (end-start) + "ms.");
 	}
 	
 	private void tfidf() {
@@ -182,7 +241,7 @@ public class PIT2015 {
 	 * Computes features based on 1,2 and 3-grams overlapping.
 	 * Implements the given baseline (linear regression of simple semantic features).
 	 */
-	private Map<String, Double> nGramsOverlap(String s1Tag, String s2Tag) {
+	private FeatureMap nGramsOverlap(String s1Tag, String s2Tag) {
 		String tags[] = s1Tag.split(" ");
 		
 		String s11grams[] = new String[tags.length];
@@ -205,7 +264,7 @@ public class PIT2015 {
 			s21stems.add( stemmer.stem(word).toString() );
 		
 		
-		Map<String, Double> features = new HashMap<String, Double>();
+		FeatureMap features = new FeatureMap();
 		
 		double[] ngramFeatures = ngramFeatures(s11grams, s21grams);
 		double[] ngramStemFeatures = ngramFeatures(
@@ -307,8 +366,8 @@ public class PIT2015 {
 	}
 	
 	
-	private Map<String, Double> wordOrderSimilarityFeatures() {
-		Map<String, Double> result = new HashMap<String, Double>();
+	private FeatureMap wordOrderSimilarityFeatures() {
+		FeatureMap result = new FeatureMap();
 		
 		return result;
 	}
