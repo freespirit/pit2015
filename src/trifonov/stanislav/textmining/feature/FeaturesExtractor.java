@@ -174,6 +174,21 @@ public class FeaturesExtractor {
 		return new Feature("1gramF1", new Float(_ngramFeatures[2]));
 	}
 	
+	public Feature get1gramStemPrecision() {
+		prepareNGramOverlapFeatures();
+		return new Feature("1gramStemPrecision", new Float(_ngramStemFeatures[0]));
+	}
+	
+	public Feature get1gramStemRecall() {
+		prepareNGramOverlapFeatures();
+		return new Feature("1gramStemRecall", new Float(_ngramStemFeatures[1]));
+	}
+	
+	public Feature get1gramStemF1() {
+		prepareNGramOverlapFeatures();
+		return new Feature("1gramStemF1", new Float(_ngramStemFeatures[2]));
+	}
+	
 	//2grams
 	
 	public Feature get2gramPrecision() {
@@ -191,8 +206,22 @@ public class FeaturesExtractor {
 		return new Feature("2gramF1", new Float(_ngramFeatures[5]));
 	}
 	
-	//3grams
+	public Feature get2gramStemPrecision() {
+		prepareNGramOverlapFeatures();
+		return new Feature("2gramStemPrecision", new Float(_ngramStemFeatures[3]));
+	}
 	
+	public Feature get2gramStemRecall() {
+		prepareNGramOverlapFeatures();
+		return new Feature("2gramStemRecall", new Float(_ngramStemFeatures[4]));
+	}
+	
+	public Feature get2gramStemF1() {
+		prepareNGramOverlapFeatures();
+		return new Feature("2gramStemF1", new Float(_ngramStemFeatures[5]));
+	}
+	
+	//3grams
 	public Feature get3gramPrecision() {
 		prepareNGramOverlapFeatures();
 		return new Feature("3gramPrecision", new Float(_ngramFeatures[6]));
@@ -206,5 +235,20 @@ public class FeaturesExtractor {
 	public Feature get3gramF1() {
 		prepareNGramOverlapFeatures();
 		return new Feature("3gramF1", new Float(_ngramFeatures[8]));
+	}
+	
+	public Feature get3gramStemPrecision() {
+		prepareNGramOverlapFeatures();
+		return new Feature("3gramStemPrecision", new Float(_ngramStemFeatures[6]));
+	}
+	
+	public Feature get3gramStemRecall() {
+		prepareNGramOverlapFeatures();
+		return new Feature("3gramStemRecall", new Float(_ngramStemFeatures[7]));
+	}
+	
+	public Feature get3gramStemF1() {
+		prepareNGramOverlapFeatures();
+		return new Feature("3gramStemF1", new Float(_ngramStemFeatures[8]));
 	}
 }

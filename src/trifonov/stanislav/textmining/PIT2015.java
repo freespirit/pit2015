@@ -23,6 +23,8 @@ import com.xeiam.xchart.BitmapEncoder.BitmapFormat;
 import com.xeiam.xchart.StyleManager.ChartType;
 import com.xeiam.xchart.StyleManager.LegendPosition;
 
+import trifonov.stanislav.ml.IMLModel;
+import trifonov.stanislav.ml.RegressionModel;
 import trifonov.stanislav.textmining.feature.Feature;
 import trifonov.stanislav.textmining.feature.FeaturesExtractor;
 
@@ -44,12 +46,15 @@ public class PIT2015 {
 			File fileTest = new File(DIRNAME_DATA, FILENAME_TEST);
 			File fileTestLabel = new File(DIRNAME_DATA, FILENAME_TEST_LABEL);
 			File fileDev = new File(DIRNAME_DATA, FILENAME_DEV);
-			File fileOutput = new File(DIRNAME_DATA, "PIT2015_STAN_01_regrrun.output");
+			File fileOutput = new File(DIRNAME_OUTPUT, "PIT2015_STAN_01_regrrun.output");
 			
 			PIT2015 pit2015 = new PIT2015();
+			pit2015.setModel( new RegressionModel() );
+			
 			pit2015.trainWithDataFile(fileTrain);
-			pit2015.predictAndExport(fileDev, fileOutput);
-			pit2015.evaluate(fileTest, fileTestLabel);
+			pit2015.evaluate(fileDev);
+			
+			pit2015.predictAndExport(fileTest, fileOutput);
 			
 //			exportFeaturesCharts(trainingPairsData);
 	}
@@ -64,6 +69,7 @@ public class PIT2015 {
 	public static final String FILENAME_TEST_LABEL = "test.label";
 	public static final String FILENAME_TOKENIZER_MODEL = "en-token.bin";
 	public static final String DIRNAME_DATA = "../SemEval-PIT2015-github/data";
+	public static final String DIRNAME_OUTPUT = "../output";
 
 	public static final int COLUMN_INDEX_TOPICID = 0;
 	public static final int COLUMN_INDEX_TOPIC = 1;
@@ -73,58 +79,39 @@ public class PIT2015 {
 	public static final int COLUMN_INDEX_SENT1TAG = 5;
 	public static final int COLUMN_INDEX_SENT2TAG = 6;
 	
-	public static final Map<String, Integer> LABEL_TYPE = new HashMap<String, Integer>();
+	public static final Map<String, Float> LABEL_TYPE = new HashMap<String, Float>();
     
-    
-	private final AbstractMultipleLinearRegression _multipleRegression = new OLSMultipleLinearRegression();
-	private final List<double[]> _multipleRegressionData = new ArrayList<double[]>();
+    private IMLModel _model;
 	private final List<PairData> _trainingPairData = new ArrayList<PairData>();
 	
 	public PIT2015() {
-		LABEL_TYPE.put("(3, 2)", PairData.LABEL_PARAPHRASE);
-		LABEL_TYPE.put("(4, 1)", PairData.LABEL_PARAPHRASE);
-		LABEL_TYPE.put("(5, 0)", PairData.LABEL_PARAPHRASE);
-		LABEL_TYPE.put("5", PairData.LABEL_PARAPHRASE);
-		LABEL_TYPE.put("4", PairData.LABEL_PARAPHRASE);
+		LABEL_TYPE.put("(5, 0)", PairData.LABEL_PARAPHRASE10);
+		LABEL_TYPE.put("(4, 1)", PairData.LABEL_PARAPHRASE08);
+		LABEL_TYPE.put("(3, 2)", PairData.LABEL_PARAPHRASE06);
+		LABEL_TYPE.put("5", PairData.LABEL_PARAPHRASE10);
+		LABEL_TYPE.put("4", PairData.LABEL_PARAPHRASE08);
+		LABEL_TYPE.put("3", PairData.LABEL_PARAPHRASE06);
 		
-		LABEL_TYPE.put("(1, 4)", PairData.LABEL_NONPARAPHRASE);
-		LABEL_TYPE.put("(0, 5)", PairData.LABEL_NONPARAPHRASE);
-		LABEL_TYPE.put("0", PairData.LABEL_NONPARAPHRASE);
-		LABEL_TYPE.put("1", PairData.LABEL_NONPARAPHRASE);
-		LABEL_TYPE.put("2", PairData.LABEL_NONPARAPHRASE);
+		LABEL_TYPE.put("(0, 5)", PairData.LABEL_NONPARAPHRASE00);
+		LABEL_TYPE.put("(1, 4)", PairData.LABEL_NONPARAPHRASE02);
+		LABEL_TYPE.put("0", PairData.LABEL_NONPARAPHRASE00);
+		LABEL_TYPE.put("1", PairData.LABEL_NONPARAPHRASE02);
 		
 		LABEL_TYPE.put("(2, 3)", PairData.LABEL_DEBATABLE);
-		LABEL_TYPE.put("3", PairData.LABEL_DEBATABLE);
+		LABEL_TYPE.put("2", PairData.LABEL_DEBATABLE);
+		
 	}
 	
-	private void feed(double data[], double label) {
-		double x[] = new double[data.length + 1];
-		x[0] = label;
-		for(int i=0; i<data.length; ++i)
-			x[i+1] = data[i];
-		
-		_multipleRegressionData.add(x);
+	private void setModel(IMLModel model) {
+		_model = model;
+	}
+	
+	private void feed(double data[], float label) {
+		_model.feedData(data, label);
 	}
 	
 	private double estimate(double data[]) {
-		if(_multipleRegressionData.size() > 0) {
-			int featuresCount = _multipleRegressionData.get(0).length - 1;
-			double observations[] = new double[_multipleRegressionData.size() * (featuresCount+1)];
-			for(int i=0; i<_multipleRegressionData.size(); ++i) {
-				for(int j=0; j<_multipleRegressionData.get(i).length; ++j)
-					observations[i*_multipleRegressionData.get(i).length + j] = _multipleRegressionData.get(i)[j];
-			}
-			_multipleRegression.newSampleData(observations, _multipleRegressionData.size(), featuresCount);
-			_multipleRegressionData.clear();
-		}
-		
-		double regressionParameters[] = _multipleRegression.estimateRegressionParameters();
-//		System.out.println("Parameteres: " + regressionParameters.length + " Features: " + featuresCount);
-		double prediction = regressionParameters[0];
-		for (int i = 0; i < data.length; i++)
-			prediction += regressionParameters[i+1] * data[i];
-
-		return prediction;
+		return _model.estimate(data);
 	}
 	
 	private PairData pairData(String s1Tags, String s2Tags, String label) {
@@ -132,11 +119,28 @@ public class PIT2015 {
 		List<Feature> features = new ArrayList<Feature>();
 //		features.add(fe.getWordOrderSimilarity());
 //		features.add(fe.getSemanticSimilarity());
+		
 		features.add(fe.get1gramPrecision());
 		features.add(fe.get1gramRecall());
 		features.add(fe.get1gramF1());
+		features.add(fe.get1gramStemPrecision());
+		features.add(fe.get1gramStemRecall());
+		features.add(fe.get1gramStemF1());
+		
+		features.add(fe.get2gramPrecision());
+		features.add(fe.get2gramRecall());
 		features.add(fe.get2gramF1());
+		features.add(fe.get2gramStemPrecision());
+		features.add(fe.get2gramStemRecall());
+		features.add(fe.get2gramStemF1());
+		
+		features.add(fe.get3gramPrecision());
+		features.add(fe.get3gramRecall());
 		features.add(fe.get3gramF1());
+		features.add(fe.get3gramStemPrecision());
+		features.add(fe.get3gramStemRecall());
+		features.add(fe.get3gramStemF1());
+		
 		return new PairData(LABEL_TYPE.get(label), features);
 	}
 	
@@ -154,6 +158,9 @@ public class PIT2015 {
 				String label = columns[COLUMN_INDEX_LABEL];
 				String tags1 = columns[COLUMN_INDEX_SENT1TAG];
 				String tags2 = columns[COLUMN_INDEX_SENT2TAG];
+				
+				if(LABEL_TYPE.get(label) == PairData.LABEL_DEBATABLE)
+					continue;
 				
 				PairData pd = pairData(tags1, tags2, label);
 				
@@ -175,21 +182,20 @@ public class PIT2015 {
 		System.out.println("Trained in " + (end-start) + "ms." + "\tItems found: " + _trainingPairData.size());
 	}
 	
-	public void evaluate(File testData, File testLabels) throws IOException {
+	public void evaluate(File testData) throws IOException {
 		BufferedReader dataReader = null;
-		BufferedReader labelReader = null;
+		List<Double> estimations = new ArrayList<Double>();
+		List<Float> labels = new ArrayList<Float>();
 		
 		try {
 			dataReader = new BufferedReader(new FileReader(testData));
-			labelReader = new BufferedReader(new FileReader(testLabels));
 			
 			String dataLine = null, columns[], label, s1tags, s2tags;
-			String labelLine = null;
 			int truePositives = 0;
 			int falsePositives = 0;
 			int falseNegatives = 0;
 			
-			while( (dataLine=dataReader.readLine()) != null && (labelLine=labelReader.readLine()) != null ) {
+			while( (dataLine=dataReader.readLine()) != null ) {
 				columns = dataLine.split("\t");
 				
 				label = columns[COLUMN_INDEX_LABEL];
@@ -204,26 +210,34 @@ public class PIT2015 {
 				
 				double estimation = estimate(x);
 				
-				int predictionLabel = Integer.MIN_VALUE;
-				if(estimation <= 0.4)
-					predictionLabel = PairData.LABEL_NONPARAPHRASE;
-				else if(estimation >= 0.6)
-					predictionLabel = PairData.LABEL_PARAPHRASE;
-				else
-					predictionLabel = PairData.LABEL_DEBATABLE;
-
-				columns = labelLine.split("\t");
-				String testLabel = columns[0];
-				if("true".equals(testLabel)) {
-					if(predictionLabel == PairData.LABEL_PARAPHRASE)
+				float labelValue = LABEL_TYPE.get(label);
+				if(labelValue >= PairData.LABEL_PARAPHRASE06) {
+					if(estimation >= PairData.LABEL_PARAPHRASE06)
 						truePositives++;
-					else if(predictionLabel == PairData.LABEL_NONPARAPHRASE)
+					else if(estimation < PairData.LABEL_DEBATABLE)
 						falseNegatives++;
 				}
-				else if("false".equals(testLabel)) {
-					if(predictionLabel == PairData.LABEL_PARAPHRASE)
+				else if( labelValue < PairData.LABEL_DEBATABLE ) {
+					if(estimation >= PairData.LABEL_PARAPHRASE06)
 						falsePositives++;
 				}
+				
+				estimations.add(estimation);
+//				if(estimation < PairData.LABEL_NONPARAPHRASE02)
+//					estimations.add((double)PairData.LABEL_NONPARAPHRASE00);
+//				else if(estimation < PairData.LABEL_DEBATABLE)
+//					estimations.add((double)PairData.LABEL_NONPARAPHRASE02);
+//				else if(estimation < PairData.LABEL_PARAPHRASE06)
+//					estimations.add((double)PairData.LABEL_DEBATABLE);
+//				else if(estimation < PairData.LABEL_PARAPHRASE08)
+//					estimations.add((double)PairData.LABEL_PARAPHRASE06);
+//				else if(estimation < PairData.LABEL_PARAPHRASE10)
+//					estimations.add((double)PairData.LABEL_PARAPHRASE08);
+//				else
+//					estimations.add((double)PairData.LABEL_PARAPHRASE10);
+				
+				labels.add(labelValue);
+//				System.out.println(labelValue +": " + estimation);
 			}
 			
 			float precision = truePositives / (float)(truePositives+falsePositives);
@@ -231,12 +245,29 @@ public class PIT2015 {
 			float f1 = 2 * precision * recall / (precision + recall);
 			
 			System.out.println("F1: " + f1 + "\tprecision: " + precision + "\trecall: " + recall);
+			
+			Histogram hEstimations = new Histogram(estimations, 200);
+//			Histogram hLabels = new Histogram(labels, 200);
+			
+			Chart chart = new ChartBuilder().chartType(ChartType.Bar)
+					.width(800)
+					.height(600)
+					.title("Estimation")
+					.xAxisTitle("Label")
+					.yAxisTitle("Count")
+					.build();
+			chart.addSeries("Estimation", hEstimations.getxAxisData(), hEstimations.getyAxisData());
+//			chart.addSeries("Original", hLabels.getxAxisData(), hLabels.getyAxisData());
+			chart.getStyleManager().setLegendPosition(LegendPosition.InsideNE);
+			chart.getStyleManager().setBarsOverlapped(true);
+	
+			BitmapEncoder.saveBitmap(chart,
+					new File("0-Estimations").getAbsolutePath(),
+					BitmapFormat.PNG);
 		}
 		finally {
 			if (dataReader!=null)
 				dataReader.close();
-			if (labelReader!=null)
-				labelReader.close();
 		}
 	}
 	
@@ -263,7 +294,7 @@ public class PIT2015 {
 					x[i] = features.get(i)._featureValue.doubleValue();
 				
 				double estimation = estimate(x);
-				String resultLabel = (estimation > 0.5 ? "true" : "false");
+				String resultLabel = (estimation > 0.4 ? "true" : "false");
 				String resultScore = 
 						String.format(
 								Locale.US, "%.4f",
@@ -308,9 +339,9 @@ public class PIT2015 {
 			for(PairData pd : pairsData) {
 				Feature f = pd.getFeature(key);
 				float value = f._featureValue.floatValue();
-				if(pd.getLabel() == PairData.LABEL_PARAPHRASE)
+				if(pd.getLabel() > PairData.LABEL_PARAPHRASE06)
 					featureValuesForParaphrases.add(f._featureValue);
-				else if(pd.getLabel() == PairData.LABEL_NONPARAPHRASE)
+				else if(pd.getLabel() < PairData.LABEL_DEBATABLE)
 					featureValuesForNonparaphrases.add(f._featureValue);
 			}
 			

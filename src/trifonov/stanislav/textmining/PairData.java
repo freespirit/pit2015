@@ -7,20 +7,23 @@ import trifonov.stanislav.textmining.feature.Feature;
 
 public class PairData {
 
-	public static final int LABEL_PARAPHRASE = 1;
-	public static final int LABEL_DEBATABLE = 0;
-	public static final int LABEL_NONPARAPHRASE = -1;
+	public static final float LABEL_PARAPHRASE10 = 1f;
+	public static final float LABEL_PARAPHRASE08 = 0.8f;
+	public static final float LABEL_PARAPHRASE06 = 0.6f;
+	public static final float LABEL_DEBATABLE = 0.4f;
+	public static final float LABEL_NONPARAPHRASE02 = 0.2f;
+	public static final float LABEL_NONPARAPHRASE00 = 0f;
 	
 	private final List<Feature> _features = new ArrayList<Feature>();
-	private final int _label;
+	private final float _label;
 	
-	public PairData(int label, List<Feature> features) {
+	public PairData(float label, List<Feature> features) {
 		_label = label;
 		for(Feature f : features)
 			_features.add(f);
 	}
 	
-	public int getLabel() {
+	public float getLabel() {
 		return _label;
 	}
 	

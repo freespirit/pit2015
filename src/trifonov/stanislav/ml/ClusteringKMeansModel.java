@@ -3,7 +3,7 @@ package trifonov.stanislav.ml;
 public class ClusteringKMeansModel implements IMLModel {
 
 	@Override
-	public void feedData(double[] data, double label) {
+	public void feedData(double[] data, float label) {
 		// TODO Auto-generated method stub
 
 	}
@@ -15,7 +15,7 @@ public class ClusteringKMeansModel implements IMLModel {
 	}
 
 	@Override
-	public double estimate(double data) {
+	public double estimate(double data[]) {
 		// TODO Auto-generated method stub
 		return 0;
 	}
