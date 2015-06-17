@@ -6,6 +6,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -23,6 +24,7 @@ import com.xeiam.xchart.BitmapEncoder.BitmapFormat;
 import com.xeiam.xchart.StyleManager.ChartType;
 import com.xeiam.xchart.StyleManager.LegendPosition;
 
+import trifonov.stanislav.ml.ClusteringKMeansModel;
 import trifonov.stanislav.ml.IMLModel;
 import trifonov.stanislav.ml.RegressionModel;
 import trifonov.stanislav.textmining.feature.Feature;
@@ -36,27 +38,32 @@ import trifonov.stanislav.textmining.feature.FeaturesExtractor;
  */
 public class PIT2015 {
 
-	public static void main(String[] args) throws IOException {
-/*//			exportDevLabels();
-			pit2015.train(false);
-//			pit2015.test();
-			pit2015.evaluate();*/
-		
+	public static void main(String[] args) throws IOException {		
 			File fileTrain = new File(DIRNAME_DATA, FILENAME_TRAIN);
 			File fileTest = new File(DIRNAME_DATA, FILENAME_TEST);
 			File fileTestLabel = new File(DIRNAME_DATA, FILENAME_TEST_LABEL);
 			File fileDev = new File(DIRNAME_DATA, FILENAME_DEV);
-			File fileOutput = new File(DIRNAME_OUTPUT, "PIT2015_STAN_01_regrrun.output");
+			String outputFileNameFormat = "PIT2015_STAN_01_%s.output";
 			
 			PIT2015 pit2015 = new PIT2015();
-			pit2015.setModel( new RegressionModel() );
+
+			for(int k=2; k<=100; ++k) {
+				System.out.println();
+				System.out.println("k(" + k + ") clusters");
+				ClusteringKMeansModel model = new ClusteringKMeansModel(k);
+				pit2015.setModel( model );
+				pit2015.trainWithDataFile(fileTrain);
+				pit2015.evaluate(fileDev);
+				File fileOutput = new File(DIRNAME_OUTPUT, String.format(outputFileNameFormat, k+"means"));
+				pit2015.predictAndExport(fileTest, fileOutput);
+				PIT2015.evalWithScripts(fileTestLabel, fileOutput);
+				
+//				System.out.println(String.format("entropy: %.3f \tpurity: %.3f", model.getEntropy(), model.getPurity()));
+//				System.out.println( String.format("clustering score: %.3f", model.evaluate()) );
+			}
 			
-			pit2015.trainWithDataFile(fileTrain);
-			pit2015.evaluate(fileDev);
 			
-			pit2015.predictAndExport(fileTest, fileOutput);
-			
-//			exportFeaturesCharts(trainingPairsData);
+//			exportFeaturesCharts(pit2015._trainingPairData);
 	}
 	
 	public static class FeatureMap extends HashMap<String, Double> {
@@ -178,8 +185,10 @@ public class PIT2015 {
 				reader.close();
 		}
 		
+		_model.build();
+		
 		long end = System.currentTimeMillis();
-		System.out.println("Trained in " + (end-start) + "ms." + "\tItems found: " + _trainingPairData.size());
+//		System.out.println("Trained in " + (end-start) + "ms." + "\tItems found: " + _trainingPairData.size());
 	}
 	
 	public void evaluate(File testData) throws IOException {
@@ -212,13 +221,13 @@ public class PIT2015 {
 				
 				float labelValue = LABEL_TYPE.get(label);
 				if(labelValue >= PairData.LABEL_PARAPHRASE06) {
-					if(estimation >= PairData.LABEL_PARAPHRASE06)
+					if(estimation >= 0.6f)
 						truePositives++;
 					else if(estimation < PairData.LABEL_DEBATABLE)
 						falseNegatives++;
 				}
 				else if( labelValue < PairData.LABEL_DEBATABLE ) {
-					if(estimation >= PairData.LABEL_PARAPHRASE06)
+					if(estimation >= 0.6f)
 						falsePositives++;
 				}
 				
@@ -244,9 +253,9 @@ public class PIT2015 {
 			float recall = truePositives / (float)(truePositives+falseNegatives);
 			float f1 = 2 * precision * recall / (precision + recall);
 			
-			System.out.println("F1: " + f1 + "\tprecision: " + precision + "\trecall: " + recall);
+			System.out.println(String.format("%.3f\t%.3f\t%.3f", f1, precision, recall));
 			
-			Histogram hEstimations = new Histogram(estimations, 200);
+/*			Histogram hEstimations = new Histogram(estimations, 200);
 //			Histogram hLabels = new Histogram(labels, 200);
 			
 			Chart chart = new ChartBuilder().chartType(ChartType.Bar)
@@ -263,7 +272,7 @@ public class PIT2015 {
 	
 			BitmapEncoder.saveBitmap(chart,
 					new File("0-Estimations").getAbsolutePath(),
-					BitmapFormat.PNG);
+					BitmapFormat.PNG);*/
 		}
 		finally {
 			if (dataReader!=null)
@@ -293,8 +302,9 @@ public class PIT2015 {
 				for (int i = 0; i < x.length; i++)
 					x[i] = features.get(i)._featureValue.doubleValue();
 				
+				//838	STAN	01_regrrun		0.612	0.625	0.600		0.525	0.627	0.573	0.691 with regression and (estimation > 0.4f ? true :false) on test.data
 				double estimation = estimate(x);
-				String resultLabel = (estimation > 0.4 ? "true" : "false");
+				String resultLabel = (estimation >= 0.6 ? "true" : "false");
 				String resultScore = 
 						String.format(
 								Locale.US, "%.4f",
@@ -375,7 +385,22 @@ public class PIT2015 {
 		System.out.println("Exporting features charts took " + (end-start) + "ms.");
 	}
 	
-	public static void exportDevLabels() throws IOException {
+	public static void evalWithScripts(File testFile, File outputFile) throws IOException {
+		List<String> command = new ArrayList<String>();
+		command.add("python");
+		command.add(DIRNAME_OUTPUT + File.separator + "pit2015_eval_single.py");
+		command.add(DIRNAME_OUTPUT + File.separator + testFile.getName());
+		command.add(DIRNAME_OUTPUT + File.separator + outputFile.getName());
+		
+		Process p = new ProcessBuilder(command).start();
+		BufferedReader reader = new BufferedReader( new InputStreamReader(p.getInputStream()) );
+		String line;
+		while( (line=reader.readLine()) != null )
+			System.out.println(line);
+		reader.close();
+	}
+	
+/*	public static void exportDevLabels() throws IOException {
 		BufferedReader reader = null;
 		BufferedWriter writer = null;
 		
@@ -406,4 +431,5 @@ public class PIT2015 {
 		}
 		
 	}
+*/
 }
