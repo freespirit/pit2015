@@ -47,10 +47,10 @@ public class PIT2015 {
 			
 			PIT2015 pit2015 = new PIT2015();
 
-			for(int k=2; k<=100; ++k) {
+			for(int k=4; k<=4; ++k) {
 				System.out.println();
 				System.out.println("k(" + k + ") clusters");
-				ClusteringKMeansModel model = new ClusteringKMeansModel(k);
+				ClusteringKMeansModel model = new ClusteringKMeansModel(k, 1.1);
 				pit2015.setModel( model );
 				pit2015.trainWithDataFile(fileTrain);
 				pit2015.evaluate(fileDev);
@@ -188,7 +188,7 @@ public class PIT2015 {
 		_model.build();
 		
 		long end = System.currentTimeMillis();
-//		System.out.println("Trained in " + (end-start) + "ms." + "\tItems found: " + _trainingPairData.size());
+		System.out.println("Trained in " + (end-start) + "ms." + "\tItems found: " + _trainingPairData.size());
 	}
 	
 	public void evaluate(File testData) throws IOException {
@@ -221,13 +221,13 @@ public class PIT2015 {
 				
 				float labelValue = LABEL_TYPE.get(label);
 				if(labelValue >= PairData.LABEL_PARAPHRASE06) {
-					if(estimation >= 0.6f)
+					if(estimation >= 0.5f)
 						truePositives++;
 					else if(estimation < PairData.LABEL_DEBATABLE)
 						falseNegatives++;
 				}
 				else if( labelValue < PairData.LABEL_DEBATABLE ) {
-					if(estimation >= 0.6f)
+					if(estimation >= 0.5f)
 						falsePositives++;
 				}
 				
@@ -255,7 +255,7 @@ public class PIT2015 {
 			
 			System.out.println(String.format("%.3f\t%.3f\t%.3f", f1, precision, recall));
 			
-/*			Histogram hEstimations = new Histogram(estimations, 200);
+			Histogram hEstimations = new Histogram(estimations, 200);
 //			Histogram hLabels = new Histogram(labels, 200);
 			
 			Chart chart = new ChartBuilder().chartType(ChartType.Bar)
@@ -272,7 +272,7 @@ public class PIT2015 {
 	
 			BitmapEncoder.saveBitmap(chart,
 					new File("0-Estimations").getAbsolutePath(),
-					BitmapFormat.PNG);*/
+					BitmapFormat.PNG);
 		}
 		finally {
 			if (dataReader!=null)
@@ -304,7 +304,7 @@ public class PIT2015 {
 				
 				//838	STAN	01_regrrun		0.612	0.625	0.600		0.525	0.627	0.573	0.691 with regression and (estimation > 0.4f ? true :false) on test.data
 				double estimation = estimate(x);
-				String resultLabel = (estimation >= 0.6 ? "true" : "false");
+				String resultLabel = (estimation >= 0.5 ? "true" : "false");
 				String resultScore = 
 						String.format(
 								Locale.US, "%.4f",

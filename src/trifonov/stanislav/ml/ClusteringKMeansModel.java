@@ -3,17 +3,18 @@ package trifonov.stanislav.ml;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
+import org.apache.commons.math3.linear.RealMatrix;
 import org.apache.commons.math3.ml.clustering.CentroidCluster;
 import org.apache.commons.math3.ml.clustering.Cluster;
 import org.apache.commons.math3.ml.clustering.Clusterable;
-import org.apache.commons.math3.ml.clustering.Clusterer;
-import org.apache.commons.math3.ml.clustering.KMeansPlusPlusClusterer;
+import org.apache.commons.math3.ml.clustering.FuzzyKMeansClusterer;
 import org.apache.commons.math3.ml.clustering.evaluation.ClusterEvaluator;
 import org.apache.commons.math3.ml.clustering.evaluation.SumOfClusterVariances;
 import org.apache.commons.math3.ml.distance.DistanceMeasure;
+
+import trifonov.stanislav.textmining.PairData;
 
 public class ClusteringKMeansModel implements IMLModel {
 	
@@ -52,14 +53,14 @@ public class ClusteringKMeansModel implements IMLModel {
 	
 	private final int _k;
 	private final List<Observation> _points = new ArrayList<Observation>();
-	private final Clusterer<Observation> _clusterer;
+	private final FuzzyKMeansClusterer<Observation> _clusterer;
 	private List<CentroidCluster<Observation>> _clusters;
 	private List<ClusterInfo> _clusterInfos;
 	
 	
-	public ClusteringKMeansModel(int k) {
+	public ClusteringKMeansModel(int k, double fuzziness) {
 		_k = k;
-		_clusterer = new KMeansPlusPlusClusterer<Observation>(_k);
+		_clusterer = new FuzzyKMeansClusterer<Observation>(_k, fuzziness);
 	}
 
 	@Override
@@ -74,27 +75,47 @@ public class ClusteringKMeansModel implements IMLModel {
 		for(Cluster<Observation> cluster : _clusters)
 			_clusterInfos.add( makeClassInfo(cluster) );
 		
-//		for(ClusterInfo info : _clusterInfos)
-//			System.out.print( String.format(Locale.US, "%.4f", info._purity) + " | ");
-//		System.out.println();
+		for(ClusterInfo info : _clusterInfos)
+			System.out.print( String.format("%.5f", info._purity) + " ");
+		System.out.println();
 	}
 
 	@Override
 	public double estimate(double data[]) {
 		DistanceMeasure distanceMeasure = _clusterer.getDistanceMeasure();
 		double minDistance = Double.MAX_VALUE;
-		ClusterInfo info = null;
-		
-		for(int i=0; i<_clusters.size(); ++i) {
-			CentroidCluster<Observation> cluster = _clusters.get(i);
-			double distanceFromCenter = distanceMeasure.compute( cluster.getCenter().getPoint(), data );
-			if(distanceFromCenter < minDistance) {
-				minDistance = distanceFromCenter;
-				info = _clusterInfos.get(i);
+		int closestPointIndex = 0;
+
+		for(int i=0; i<_points.size(); ++i) {
+			double distanceFromPoint = distanceMeasure.compute(_points.get(i)._data, data);
+			if(distanceFromPoint < minDistance) {
+				minDistance = distanceFromPoint;
+				closestPointIndex = i;
 			}
 		}
 		
-		return info._label;
+		RealMatrix membershipMatrix = _clusterer.getMembershipMatrix();
+		double[] membershipWeights = membershipMatrix.getRow(closestPointIndex);
+		double positiveWeights = 0;
+		double negativeWeights = 0;
+		for(int i=0; i<membershipWeights.length; ++i) {
+			if( _clusterInfos.get(i)._label >= PairData.LABEL_PARAPHRASE06 )
+				positiveWeights += membershipWeights[i];
+			else
+				negativeWeights += membershipWeights[i];
+		}
+		
+		double positiveEstimation = 0;
+		double negativeEstimation = 0;
+		
+		for(int i=0; i<membershipWeights.length; ++i) {
+			if( _clusterInfos.get(i)._label >= 0.6 )
+				positiveEstimation += ( (membershipWeights[i]/positiveWeights) * _clusterInfos.get(i)._label);
+			else
+				negativeEstimation += ( (membershipWeights[i]/negativeWeights) * _clusterInfos.get(i)._label);
+		}
+		
+		return positiveWeights > negativeWeights ? positiveEstimation : negativeEstimation;
 	}
 	
 	protected ClusterInfo makeClassInfo(Cluster<Observation> cluster) {
@@ -109,6 +130,7 @@ public class ClusteringKMeansModel implements IMLModel {
 		
 		int maxOccurences = Integer.MIN_VALUE;
 		float dominantLabel = Float.MIN_VALUE;
+		label = 0f;
 		float entropy = 0;
 		
 		for(Map.Entry<Float, Integer> entry : classOccurrences.entrySet()) {
@@ -116,12 +138,14 @@ public class ClusteringKMeansModel implements IMLModel {
 				maxOccurences = entry.getValue();
 				dominantLabel = entry.getKey();
 			}
+			label += entry.getKey() * entry.getValue() / (double)cluster.getPoints().size();
 			double p = entry.getValue() / (double)cluster.getPoints().size();
 			entropy -= p * log2(p);
 		}
 		
 		return new ClusterInfo(
-				dominantLabel,
+//				dominantLabel,
+				label,
 				maxOccurences / (double)cluster.getPoints().size(),
 				entropy );
 	}
@@ -150,8 +174,8 @@ public class ClusteringKMeansModel implements IMLModel {
 	}
 	
 	public double evaluate() {
-		ClusterEvaluator<Observation> evaluator =
-				new SumOfClusterVariances<ClusteringKMeansModel.Observation>(_clusterer.getDistanceMeasure());
+		ClusterEvaluator<Observation> evaluator = 
+				new SumOfClusterVariances<Observation>(_clusterer.getDistanceMeasure());
 		
 		return evaluator.score(_clusters);
 	}
