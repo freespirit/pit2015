@@ -13,9 +13,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import org.apache.commons.math3.stat.regression.AbstractMultipleLinearRegression;
-import org.apache.commons.math3.stat.regression.OLSMultipleLinearRegression;
-
 import com.xeiam.xchart.BitmapEncoder;
 import com.xeiam.xchart.Chart;
 import com.xeiam.xchart.ChartBuilder;
@@ -26,7 +23,6 @@ import com.xeiam.xchart.StyleManager.LegendPosition;
 
 import trifonov.stanislav.ml.ClusteringKMeansModel;
 import trifonov.stanislav.ml.IMLModel;
-import trifonov.stanislav.ml.RegressionModel;
 import trifonov.stanislav.textmining.feature.Feature;
 import trifonov.stanislav.textmining.feature.FeaturesExtractor;
 
@@ -47,10 +43,10 @@ public class PIT2015 {
 			
 			PIT2015 pit2015 = new PIT2015();
 
-			for(int k=4; k<=4; ++k) {
+			for(int k=2; k<=2; ++k) {
 				System.out.println();
 				System.out.println("k(" + k + ") clusters");
-				ClusteringKMeansModel model = new ClusteringKMeansModel(k, 1.1);
+				ClusteringKMeansModel model = new ClusteringKMeansModel(100, 0.015);
 				pit2015.setModel( model );
 				pit2015.trainWithDataFile(fileTrain);
 				pit2015.evaluate(fileDev);
@@ -127,23 +123,23 @@ public class PIT2015 {
 //		features.add(fe.getWordOrderSimilarity());
 //		features.add(fe.getSemanticSimilarity());
 		
-		features.add(fe.get1gramPrecision());
-		features.add(fe.get1gramRecall());
-		features.add(fe.get1gramF1());
+//		features.add(fe.get1gramPrecision());
+//		features.add(fe.get1gramRecall());
+//		features.add(fe.get1gramF1());
 		features.add(fe.get1gramStemPrecision());
 		features.add(fe.get1gramStemRecall());
 		features.add(fe.get1gramStemF1());
 		
-		features.add(fe.get2gramPrecision());
-		features.add(fe.get2gramRecall());
-		features.add(fe.get2gramF1());
+//		features.add(fe.get2gramPrecision());
+//		features.add(fe.get2gramRecall());
+//		features.add(fe.get2gramF1());
 		features.add(fe.get2gramStemPrecision());
 		features.add(fe.get2gramStemRecall());
 		features.add(fe.get2gramStemF1());
 		
-		features.add(fe.get3gramPrecision());
-		features.add(fe.get3gramRecall());
-		features.add(fe.get3gramF1());
+//		features.add(fe.get3gramPrecision());
+//		features.add(fe.get3gramRecall());
+//		features.add(fe.get3gramF1());
 		features.add(fe.get3gramStemPrecision());
 		features.add(fe.get3gramStemRecall());
 		features.add(fe.get3gramStemF1());
