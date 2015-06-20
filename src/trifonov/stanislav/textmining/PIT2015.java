@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import org.apache.commons.math3.stat.regression.AbstractMultipleLinearRegression;
 import org.apache.commons.math3.stat.regression.OLSMultipleLinearRegression;
@@ -47,14 +48,18 @@ public class PIT2015 {
 			
 			PIT2015 pit2015 = new PIT2015();
 
-			for(int k=4; k<=4; ++k) {
+			Map<String, IMLModel> models = new HashMap<String, IMLModel>();
+			models.put( "regrrun", new RegressionModel() );
+			for(int k=4; k<=4; ++k)
+				models.put( k+"means", new ClusteringKMeansModel(k, 1.1) );
+			
+			for(Entry<String, IMLModel> entry : models.entrySet()) {
 				System.out.println();
-				System.out.println("k(" + k + ") clusters");
-				ClusteringKMeansModel model = new ClusteringKMeansModel(k, 1.1);
-				pit2015.setModel( model );
+				System.out.println(entry.getKey());
+				pit2015.setModel( entry.getValue() );
 				pit2015.trainWithDataFile(fileTrain);
 				pit2015.evaluate(fileDev);
-				File fileOutput = new File(DIRNAME_OUTPUT, String.format(outputFileNameFormat, k+"means"));
+				File fileOutput = new File(DIRNAME_OUTPUT, String.format(outputFileNameFormat, entry.getKey()));
 				pit2015.predictAndExport(fileTest, fileOutput);
 				PIT2015.evalWithScripts(fileTestLabel, fileOutput);
 				
@@ -304,7 +309,7 @@ public class PIT2015 {
 				
 				//838	STAN	01_regrrun		0.612	0.625	0.600		0.525	0.627	0.573	0.691 with regression and (estimation > 0.4f ? true :false) on test.data
 				double estimation = estimate(x);
-				String resultLabel = (estimation >= 0.5 ? "true" : "false");
+				String resultLabel = (estimation > 0.4 ? "true" : "false");
 				String resultScore = 
 						String.format(
 								Locale.US, "%.4f",
