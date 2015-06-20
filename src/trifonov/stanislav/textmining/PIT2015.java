@@ -14,9 +14,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import org.apache.commons.math3.stat.regression.AbstractMultipleLinearRegression;
-import org.apache.commons.math3.stat.regression.OLSMultipleLinearRegression;
-
 import com.xeiam.xchart.BitmapEncoder;
 import com.xeiam.xchart.Chart;
 import com.xeiam.xchart.ChartBuilder;
@@ -25,7 +22,6 @@ import com.xeiam.xchart.BitmapEncoder.BitmapFormat;
 import com.xeiam.xchart.StyleManager.ChartType;
 import com.xeiam.xchart.StyleManager.LegendPosition;
 
-import trifonov.stanislav.ml.ClusteringKMeansModel;
 import trifonov.stanislav.ml.IMLModel;
 import trifonov.stanislav.ml.RegressionModel;
 import trifonov.stanislav.textmining.feature.Feature;
@@ -50,8 +46,8 @@ public class PIT2015 {
 
 			Map<String, IMLModel> models = new HashMap<String, IMLModel>();
 			models.put( "regrrun", new RegressionModel() );
-			for(int k=4; k<=4; ++k)
-				models.put( k+"means", new ClusteringKMeansModel(k, 1.1) );
+//			for(int k=4; k<=4; ++k)
+//				models.put( k+"means", new ClusteringKMeansModel(k, 1.1) );
 			
 			for(Entry<String, IMLModel> entry : models.entrySet()) {
 				System.out.println();
@@ -68,7 +64,7 @@ public class PIT2015 {
 			}
 			
 			
-//			exportFeaturesCharts(pit2015._trainingPairData);
+			exportFeaturesCharts(pit2015._trainingPairData);
 	}
 	
 	public static class FeatureMap extends HashMap<String, Double> {
@@ -260,24 +256,24 @@ public class PIT2015 {
 			
 			System.out.println(String.format("%.3f\t%.3f\t%.3f", f1, precision, recall));
 			
-			Histogram hEstimations = new Histogram(estimations, 200);
-//			Histogram hLabels = new Histogram(labels, 200);
-			
-			Chart chart = new ChartBuilder().chartType(ChartType.Bar)
-					.width(800)
-					.height(600)
-					.title("Estimation")
-					.xAxisTitle("Label")
-					.yAxisTitle("Count")
-					.build();
-			chart.addSeries("Estimation", hEstimations.getxAxisData(), hEstimations.getyAxisData());
-//			chart.addSeries("Original", hLabels.getxAxisData(), hLabels.getyAxisData());
-			chart.getStyleManager().setLegendPosition(LegendPosition.InsideNE);
-			chart.getStyleManager().setBarsOverlapped(true);
-	
-			BitmapEncoder.saveBitmap(chart,
-					new File("0-Estimations").getAbsolutePath(),
-					BitmapFormat.PNG);
+//			Histogram hEstimations = new Histogram(estimations, 200);
+////			Histogram hLabels = new Histogram(labels, 200);
+//			
+//			Chart chart = new ChartBuilder().chartType(ChartType.Bar)
+//					.width(800)
+//					.height(600)
+//					.title("Estimation")
+//					.xAxisTitle("Label")
+//					.yAxisTitle("Count")
+//					.build();
+//			chart.addSeries("Estimation", hEstimations.getxAxisData(), hEstimations.getyAxisData());
+////			chart.addSeries("Original", hLabels.getxAxisData(), hLabels.getyAxisData());
+//			chart.getStyleManager().setLegendPosition(LegendPosition.InsideNE);
+//			chart.getStyleManager().setBarsOverlapped(true);
+//	
+//			BitmapEncoder.saveBitmap(chart,
+//					new File("0-Estimations").getAbsolutePath(),
+//					BitmapFormat.PNG);
 		}
 		finally {
 			if (dataReader!=null)
@@ -400,6 +396,11 @@ public class PIT2015 {
 		Process p = new ProcessBuilder(command).start();
 		BufferedReader reader = new BufferedReader( new InputStreamReader(p.getInputStream()) );
 		String line;
+		while( (line=reader.readLine()) != null )
+			System.out.println(line);
+		reader.close();
+		
+		reader = new BufferedReader( new InputStreamReader(p.getErrorStream()) );
 		while( (line=reader.readLine()) != null )
 			System.out.println(line);
 		reader.close();

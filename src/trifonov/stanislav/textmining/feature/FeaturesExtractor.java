@@ -14,22 +14,73 @@ public class FeaturesExtractor {
 	private float[] _ngramFeatures = null;
 	private float[] _ngramStemFeatures = null;
 	
+	private List<String> _s1Words = new ArrayList<String>();
+	private List<String> _s2Words = new ArrayList<String>();
+	
 	
 	public FeaturesExtractor(String tags1, String tags2) {
 		_sentence1Tags = tags1;
 		_sentence2Tags = tags2;
+		
+		String tags[] = _sentence1Tags.split(" ");
+		for(int i=0; i<tags.length; ++i)
+			_s1Words.add( tags[i].substring(0, tags[i].indexOf('/')) );
+		
+		tags = _sentence2Tags.split(" ");
+		for(int i=0; i<tags.length; ++i)
+			_s2Words.add( tags[i].substring(0, tags[i].indexOf('/')) );
 	}
 	
 	
 	public Feature getWordOrderSimilarity() {
+		Stemmer stemmer = new PorterStemmer();
+		List<String> s1stems = new ArrayList<String>(_s1Words.size());
+		List<String> s2stems = new ArrayList<String>(_s2Words.size());
+
+		for(String word : _s1Words)
+			s1stems.add( stemmer.stem(word).toString() );
+		for(String word : _s2Words)
+			s2stems.add( stemmer.stem(word).toString() );
 		
-		return null;
+		List<String> commonStems = new ArrayList<String>();
+		for(String stem : s1stems)
+			if(s2stems.contains(stem))
+				commonStems.add(stem);
+		
+		int[] s1Order = new int[commonStems.size()];
+		int[] s2Order = new int[commonStems.size()];
+		
+		for(int i=0; i<commonStems.size(); ++i) {
+			String stem = commonStems.get(i);
+			
+			for(int j=0; j<s1stems.size(); ++j)
+				if(s1stems.get(j).equals(stem)) {
+					s1Order[i] = j;
+					break;
+				}
+			
+			for(int j=0; j<s2stems.size(); ++j)
+				if(s2stems.get(j).equals(stem)) {
+					s2Order[i] = j;
+					break;
+				}
+		}
+		
+		double sum = 0;
+		double diff = 0;
+		for(int i=0; i<commonStems.size(); ++i) {
+			sum += s1Order[i] + s2Order[i];
+			diff += s1Order[i] - s2Order[i];
+		}
+		double wordOrderSimilarity = 1 - (diff/sum);
+		return new Feature( "wordOrder", new Double(wordOrderSimilarity) );
 	}
 	
 	/**
 	 * 3.3.3 The Combined Semantic and Syntactic Measures, the pdf 
 	 */
 	public Feature getSemanticSimilarity() {
+		int n = _s1Words.size() + _s2Words.size();
 		
 		return null;
 	}
