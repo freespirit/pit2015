@@ -33,56 +33,84 @@ public class FeaturesExtractor {
 	
 	
 	public Feature getWordOrderSimilarity() {
-		Stemmer stemmer = new PorterStemmer();
-		List<String> s1stems = new ArrayList<String>(_s1Words.size());
-		List<String> s2stems = new ArrayList<String>(_s2Words.size());
-
-		for(String word : _s1Words)
-			s1stems.add( stemmer.stem(word).toString() );
-		for(String word : _s2Words)
-			s2stems.add( stemmer.stem(word).toString() );
 		
-		List<String> commonStems = new ArrayList<String>();
-		for(String stem : s1stems)
-			if(s2stems.contains(stem))
-				commonStems.add(stem);
-		
-		int[] s1Order = new int[commonStems.size()];
-		int[] s2Order = new int[commonStems.size()];
-		
-		for(int i=0; i<commonStems.size(); ++i) {
-			String stem = commonStems.get(i);
-			
-			for(int j=0; j<s1stems.size(); ++j)
-				if(s1stems.get(j).equals(stem)) {
-					s1Order[i] = j;
-					break;
-				}
-			
-			for(int j=0; j<s2stems.size(); ++j)
-				if(s2stems.get(j).equals(stem)) {
-					s2Order[i] = j;
-					break;
-				}
-		}
-		
-		double sum = 0;
-		double diff = 0;
-		for(int i=0; i<commonStems.size(); ++i) {
-			sum += s1Order[i] + s2Order[i];
-			diff += s1Order[i] - s2Order[i];
-		}
-		double wordOrderSimilarity = 1 - (diff/sum);
-		return new Feature( "wordOrder", new Double(wordOrderSimilarity) );
+		return new Feature( "wordOrder", new Float(wordOrderSimilarity()) );
 	}
+	
+	private float wordOrderSimilarity() {
+		List<String> allWords = new ArrayList<String>();
+		
+		for(String word : _s1Words)
+			if( !allWords.contains(word) )
+				allWords.add(word);
+		for(String word : _s2Words)
+			if( !allWords.contains(word) )
+				allWords.add(word);
+		
+		int[] s1 = new int[allWords.size()];
+		int[] s2 = new int[allWords.size()];
+		
+		for(int i=0; i<allWords.size(); ++i) {
+			String word = allWords.get(i);
+			s1[i] = _s1Words.contains(word) ? _s1Words.indexOf(word) : 0;
+			s2[i] = _s2Words.contains(word) ? _s2Words.indexOf(word) : 0;
+		}
+		
+		float sum = 0;
+		float diff = 0;
+		for(int i=0; i<allWords.size(); ++i) {
+			sum += s1[i] + s2[i];
+			diff += s1[i] - s2[i];
+		}
+		
+		return 1 - (diff/sum);
+	}
+
+	// For WordOrder And Semantic similarity (vector):
+	// http://ants.iis.sinica.edu.tw/3BkMJ9lTeWXTSrrvNoKNFDxRm3zFwRR/55/Sentence%20Similarity%20Based%20on%20Semantic%20Nets%20and%20corpus%20statistics.pdf
+	//
 	
 	/**
 	 * 3.3.3 The Combined Semantic and Syntactic Measures, the pdf 
 	 */
 	public Feature getSemanticSimilarity() {
-		int n = _s1Words.size() + _s2Words.size();
+		List<String> allWords = new ArrayList<String>();
 		
-		return null;
+		for(String word : _s1Words)
+			if( !allWords.contains(word) )
+				allWords.add(word);
+		for(String word : _s2Words)
+			if( !allWords.contains(word) )
+				allWords.add(word);
+		
+		int[] s1 = new int[allWords.size()];
+		int[] s2 = new int[allWords.size()];
+		
+		for(int i=0; i<allWords.size(); ++i) {
+			s1[i] = _s1Words.contains(allWords.get(i)) ? 1 : 0;
+			s2[i] = _s2Words.contains(allWords.get(i)) ? 1 : 0;
+		}
+		
+		float lambda = 1f;//0.8f;
+		
+		float wo = wordOrderSimilarity();
+		float cosSim = cosineSimilarity(s1, s2);
+		float ssvwo = lambda * cosSim + (1-lambda) * wo;
+		return new Feature( "ssv+wo", new Float(ssvwo) );
+	}
+	
+	private float cosineSimilarity(int[] a, int[] b) {
+		int dotProduct = 0;
+		int magnitudeA = 0;
+		int magnituteB = 0;
+		
+		for(int i=0; i<a.length; ++i) {
+			dotProduct += a[i] * b[i];
+			magnitudeA += a[i] * a[i];
+			magnituteB += b[i] * b[i];
+		}
+		
+		return dotProduct / (float)(Math.sqrt(magnitudeA) * Math.sqrt(magnituteB));
 	}
 	
 	/**

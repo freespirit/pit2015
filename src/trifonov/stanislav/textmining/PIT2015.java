@@ -22,6 +22,7 @@ import com.xeiam.xchart.BitmapEncoder.BitmapFormat;
 import com.xeiam.xchart.StyleManager.ChartType;
 import com.xeiam.xchart.StyleManager.LegendPosition;
 
+import trifonov.stanislav.ml.ClusteringKMeansModel;
 import trifonov.stanislav.ml.IMLModel;
 import trifonov.stanislav.ml.RegressionModel;
 import trifonov.stanislav.textmining.feature.Feature;
@@ -46,8 +47,8 @@ public class PIT2015 {
 
 			Map<String, IMLModel> models = new HashMap<String, IMLModel>();
 			models.put( "regrrun", new RegressionModel() );
-//			for(int k=4; k<=4; ++k)
-//				models.put( k+"means", new ClusteringKMeansModel(k, 1.1) );
+			for(int k=4; k<=4; ++k)
+				models.put( k+"means", new ClusteringKMeansModel(k, 1.1) );
 			
 			for(Entry<String, IMLModel> entry : models.entrySet()) {
 				System.out.println();
@@ -125,29 +126,29 @@ public class PIT2015 {
 	private PairData pairData(String s1Tags, String s2Tags, String label) {
 		FeaturesExtractor fe = new FeaturesExtractor(s1Tags, s2Tags);
 		List<Feature> features = new ArrayList<Feature>();
-//		features.add(fe.getWordOrderSimilarity());
-//		features.add(fe.getSemanticSimilarity());
+		features.add(fe.getWordOrderSimilarity());
+		features.add(fe.getSemanticSimilarity());
 		
-		features.add(fe.get1gramPrecision());
-		features.add(fe.get1gramRecall());
-		features.add(fe.get1gramF1());
-		features.add(fe.get1gramStemPrecision());
-		features.add(fe.get1gramStemRecall());
-		features.add(fe.get1gramStemF1());
-		
-		features.add(fe.get2gramPrecision());
-		features.add(fe.get2gramRecall());
-		features.add(fe.get2gramF1());
-		features.add(fe.get2gramStemPrecision());
-		features.add(fe.get2gramStemRecall());
-		features.add(fe.get2gramStemF1());
-		
-		features.add(fe.get3gramPrecision());
-		features.add(fe.get3gramRecall());
-		features.add(fe.get3gramF1());
-		features.add(fe.get3gramStemPrecision());
-		features.add(fe.get3gramStemRecall());
-		features.add(fe.get3gramStemF1());
+//		features.add(fe.get1gramPrecision());
+//		features.add(fe.get1gramRecall());
+//		features.add(fe.get1gramF1());
+//		features.add(fe.get1gramStemPrecision());
+//		features.add(fe.get1gramStemRecall());
+//		features.add(fe.get1gramStemF1());
+//		
+//		features.add(fe.get2gramPrecision());
+//		features.add(fe.get2gramRecall());
+//		features.add(fe.get2gramF1());
+//		features.add(fe.get2gramStemPrecision());
+//		features.add(fe.get2gramStemRecall());
+//		features.add(fe.get2gramStemF1());
+//		
+//		features.add(fe.get3gramPrecision());
+//		features.add(fe.get3gramRecall());
+//		features.add(fe.get3gramF1());
+//		features.add(fe.get3gramStemPrecision());
+//		features.add(fe.get3gramStemRecall());
+//		features.add(fe.get3gramStemF1());
 		
 		return new PairData(LABEL_TYPE.get(label), features);
 	}
@@ -256,24 +257,24 @@ public class PIT2015 {
 			
 			System.out.println(String.format("%.3f\t%.3f\t%.3f", f1, precision, recall));
 			
-//			Histogram hEstimations = new Histogram(estimations, 200);
-////			Histogram hLabels = new Histogram(labels, 200);
-//			
-//			Chart chart = new ChartBuilder().chartType(ChartType.Bar)
-//					.width(800)
-//					.height(600)
-//					.title("Estimation")
-//					.xAxisTitle("Label")
-//					.yAxisTitle("Count")
-//					.build();
-//			chart.addSeries("Estimation", hEstimations.getxAxisData(), hEstimations.getyAxisData());
-////			chart.addSeries("Original", hLabels.getxAxisData(), hLabels.getyAxisData());
-//			chart.getStyleManager().setLegendPosition(LegendPosition.InsideNE);
-//			chart.getStyleManager().setBarsOverlapped(true);
-//	
-//			BitmapEncoder.saveBitmap(chart,
-//					new File("0-Estimations").getAbsolutePath(),
-//					BitmapFormat.PNG);
+			Histogram hEstimations = new Histogram(estimations, 200);
+//			Histogram hLabels = new Histogram(labels, 200);
+			
+			Chart chart = new ChartBuilder().chartType(ChartType.Bar)
+					.width(800)
+					.height(600)
+					.title("Estimation")
+					.xAxisTitle("Label")
+					.yAxisTitle("Count")
+					.build();
+			chart.addSeries("Estimation", hEstimations.getxAxisData(), hEstimations.getyAxisData());
+//			chart.addSeries("Original", hLabels.getxAxisData(), hLabels.getyAxisData());
+			chart.getStyleManager().setLegendPosition(LegendPosition.InsideNE);
+			chart.getStyleManager().setBarsOverlapped(true);
+	
+			BitmapEncoder.saveBitmap(chart,
+					new File("0-Estimations").getAbsolutePath(),
+					BitmapFormat.PNG);
 		}
 		finally {
 			if (dataReader!=null)
