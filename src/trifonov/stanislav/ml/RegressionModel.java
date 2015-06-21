@@ -10,6 +10,7 @@ public class RegressionModel implements IMLModel {
 
 	private final List<double[]> _multipleRegressionData = new ArrayList<double[]>();
 	AbstractMultipleLinearRegression _multipleRegression = new OLSMultipleLinearRegression();
+	double[] _regressionParameters = null;
 	
 	@Override
 	public void feedData(double[] data, float label) {
@@ -23,13 +24,6 @@ public class RegressionModel implements IMLModel {
 
 	@Override
 	public void build() {
-		// TODO Auto-generated method stub
-
-	}
-
-	@Override
-	public double estimate(double features[]) {
-		
 		if(_multipleRegressionData.size() > 0) {
 			int featuresCount = _multipleRegressionData.get(0).length - 1;
 			double observations[] = new double[_multipleRegressionData.size() * (featuresCount+1)];
@@ -42,10 +36,16 @@ public class RegressionModel implements IMLModel {
 			_multipleRegressionData.clear();
 		}
 		
-		double regressionParameters[] = _multipleRegression.estimateRegressionParameters();
+ 		_regressionParameters = _multipleRegression.estimateRegressionParameters();
+	}
+
+	@Override
+	public double estimate(double features[]) {
+		
+		
 		double estimation = 0;
 		for (int i = 0; i < features.length; i++)
-			estimation += regressionParameters[i] * features[i];
+			estimation += _regressionParameters[i] * features[i];
 
 		return estimation;
 	}

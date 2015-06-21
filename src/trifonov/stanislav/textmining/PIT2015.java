@@ -9,11 +9,15 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import java.util.Set;
+
+import com.medallia.word2vec.Word2VecModel;
 import com.xeiam.xchart.BitmapEncoder;
 import com.xeiam.xchart.Chart;
 import com.xeiam.xchart.ChartBuilder;
@@ -35,8 +39,9 @@ import trifonov.stanislav.textmining.feature.FeaturesExtractor;
  *
  */
 public class PIT2015 {
+	private static final float LABEL_PREDICTION_BORDER = 0.35f;
 
-	public static void main(String[] args) throws IOException {		
+	public static void main(String[] args) throws IOException, InterruptedException {		
 			File fileTrain = new File(DIRNAME_DATA, FILENAME_TRAIN);
 			File fileTest = new File(DIRNAME_DATA, FILENAME_TEST);
 			File fileTestLabel = new File(DIRNAME_DATA, FILENAME_TEST_LABEL);
@@ -44,11 +49,12 @@ public class PIT2015 {
 			String outputFileNameFormat = "PIT2015_STAN_01_%s.output";
 			
 			PIT2015 pit2015 = new PIT2015();
+			pit2015.initW2VModel(fileTrain);
 
 			Map<String, IMLModel> models = new HashMap<String, IMLModel>();
 			models.put( "regrrun", new RegressionModel() );
-			for(int k=4; k<=4; ++k)
-				models.put( k+"means", new ClusteringKMeansModel(k, 1.1) );
+//			for(int k=4; k<=4; ++k)
+//				models.put( k+"means", new ClusteringKMeansModel(k, 1.1) );
 			
 			for(Entry<String, IMLModel> entry : models.entrySet()) {
 				System.out.println();
@@ -63,7 +69,6 @@ public class PIT2015 {
 //				System.out.println(String.format("entropy: %.3f \tpurity: %.3f", model.getEntropy(), model.getPurity()));
 //				System.out.println( String.format("clustering score: %.3f", model.evaluate()) );
 			}
-			
 			
 			exportFeaturesCharts(pit2015._trainingPairData);
 	}
@@ -91,7 +96,9 @@ public class PIT2015 {
 	public static final Map<String, Float> LABEL_TYPE = new HashMap<String, Float>();
     
     private IMLModel _model;
+    private FeaturesExtractor _featuresExtractor;
 	private final List<PairData> _trainingPairData = new ArrayList<PairData>();
+	private Word2VecModel _w2vModel;
 	
 	public PIT2015() {
 		LABEL_TYPE.put("(5, 0)", PairData.LABEL_PARAPHRASE10);
@@ -123,68 +130,109 @@ public class PIT2015 {
 		return _model.estimate(data);
 	}
 	
-	private PairData pairData(String s1Tags, String s2Tags, String label) {
-		FeaturesExtractor fe = new FeaturesExtractor(s1Tags, s2Tags);
-		List<Feature> features = new ArrayList<Feature>();
-		features.add(fe.getWordOrderSimilarity());
-		features.add(fe.getSemanticSimilarity());
+	private PairData pairData(String s1Tags, String s2Tags, String label) throws IOException {
+		if(_featuresExtractor == null)
+			_featuresExtractor = new FeaturesExtractor(s1Tags, s2Tags, _w2vModel);
+		else
+			_featuresExtractor.init(s1Tags, s2Tags);
 		
-//		features.add(fe.get1gramPrecision());
-//		features.add(fe.get1gramRecall());
-//		features.add(fe.get1gramF1());
-//		features.add(fe.get1gramStemPrecision());
-//		features.add(fe.get1gramStemRecall());
-//		features.add(fe.get1gramStemF1());
+		List<Feature> features = new ArrayList<Feature>();
+//		features.add(_featuresExtractor.getWordOrderSimilarity());
+//		features.add(_featuresExtractor.getSemanticSimilarity());
+//		features.add(_featuresExtractor.getWord2VecFeature());
+//		features.add(_featuresExtractor.getW2VSSFeature());
+		features.add(_featuresExtractor.getW2VCosSimFeature());
+		
+//		features.add(_featuresExtractor.get1gramPrecision());
+//		features.add(_featuresExtractor.get1gramRecall());
+//		features.add(_featuresExtractor.get1gramF1());
+//		features.add(_featuresExtractor.get1gramStemPrecision());
+//		features.add(_featuresExtractor.get1gramStemRecall());
+//		features.add(_featuresExtractor.get1gramStemF1());
 //		
-//		features.add(fe.get2gramPrecision());
-//		features.add(fe.get2gramRecall());
-//		features.add(fe.get2gramF1());
-//		features.add(fe.get2gramStemPrecision());
-//		features.add(fe.get2gramStemRecall());
-//		features.add(fe.get2gramStemF1());
+//		features.add(_featuresExtractor.get2gramPrecision());
+//		features.add(_featuresExtractor.get2gramRecall());
+//		features.add(_featuresExtractor.get2gramF1());
+//		features.add(_featuresExtractor.get2gramStemPrecision());
+//		features.add(_featuresExtractor.get2gramStemRecall());
+//		features.add(_featuresExtractor.get2gramStemF1());
 //		
-//		features.add(fe.get3gramPrecision());
-//		features.add(fe.get3gramRecall());
-//		features.add(fe.get3gramF1());
-//		features.add(fe.get3gramStemPrecision());
-//		features.add(fe.get3gramStemRecall());
-//		features.add(fe.get3gramStemF1());
+//		features.add(_featuresExtractor.get3gramPrecision());
+//		features.add(_featuresExtractor.get3gramRecall());
+//		features.add(_featuresExtractor.get3gramF1());
+//		features.add(_featuresExtractor.get3gramStemPrecision());
+//		features.add(_featuresExtractor.get3gramStemRecall());
+//		features.add(_featuresExtractor.get3gramStemF1());
 		
 		return new PairData(LABEL_TYPE.get(label), features);
 	}
 	
-	public void trainWithDataFile(File dataFile) throws IOException {
-		long start = System.currentTimeMillis();
-		_trainingPairData.clear();
-		
+	public void initW2VModel(File dataFile) throws IOException, InterruptedException {
 		BufferedReader reader = null;
 		try {
 			reader = new BufferedReader( new FileReader(dataFile) );
 			String lineInFile = null;
+			Set<List<String>> sentences = new HashSet<List<String>>();
 			
 			while( (lineInFile=reader.readLine()) != null ) {
 				String[] columns = lineInFile.split("\t");
-				String label = columns[COLUMN_INDEX_LABEL];
 				String tags1 = columns[COLUMN_INDEX_SENT1TAG];
 				String tags2 = columns[COLUMN_INDEX_SENT2TAG];
 				
-				if(LABEL_TYPE.get(label) == PairData.LABEL_DEBATABLE)
-					continue;
+				String tags[] = tags1.split(" ");
+				List<String> sentence1 = new ArrayList<String>(tags.length);
+				for(int i=0; i<tags.length; ++i)
+					sentence1.add( tags[i].substring(0, tags[i].indexOf('/')) );
+				sentences.add(sentence1);
 				
-				PairData pd = pairData(tags1, tags2, label);
-				
-				List<Feature> features = pd.getFeatures();
-				double x[] = new double[features.size()];
-				for (int i = 0; i < features.size(); i++)
-					x[i] = features.get(i)._featureValue.doubleValue();
-				feed(x, pd.getLabel());
-				
-				_trainingPairData.add( pd );
+				tags = tags2.split(" ");
+				List<String> sentence2 = new ArrayList<String>(tags.length);
+				for(int i=0; i<tags.length; ++i)
+					sentence2.add( tags[i].substring(0, tags[i].indexOf('/')) );
+				sentences.add(sentence2);
 			}
 			
-		} finally {
-			if(reader != null)
-				reader.close();
+			_w2vModel = Word2VecModel.trainer().train(sentences);
+		}
+		finally {
+			reader.close();
+		}
+	}
+	
+	public void trainWithDataFile(File dataFile) throws IOException {
+		long start = System.currentTimeMillis();
+//		_trainingPairData.clear();
+		if(_trainingPairData == null || _trainingPairData.isEmpty()) {
+			BufferedReader reader = null;
+			try {
+				reader = new BufferedReader( new FileReader(dataFile) );
+				String lineInFile = null;
+				
+				while( (lineInFile=reader.readLine()) != null ) {
+					String[] columns = lineInFile.split("\t");
+					String label = columns[COLUMN_INDEX_LABEL];
+					String tags1 = columns[COLUMN_INDEX_SENT1TAG];
+					String tags2 = columns[COLUMN_INDEX_SENT2TAG];
+					
+					if(LABEL_TYPE.get(label) == PairData.LABEL_DEBATABLE)
+						continue;
+					
+					PairData pd = pairData(tags1, tags2, label);
+					_trainingPairData.add( pd );
+				}
+				
+			} finally {
+				if(reader != null)
+					reader.close();
+			}
+		}
+		
+		for(PairData pd : _trainingPairData) {
+			List<Feature> features = pd.getFeatures();
+			double x[] = new double[features.size()];
+			for (int i = 0; i < features.size(); i++)
+				x[i] = features.get(i)._featureValue.doubleValue();
+			feed(x, pd.getLabel());
 		}
 		
 		_model.build();
@@ -197,6 +245,8 @@ public class PIT2015 {
 		BufferedReader dataReader = null;
 		List<Double> estimations = new ArrayList<Double>();
 		List<Float> labels = new ArrayList<Float>();
+		
+		long start = System.currentTimeMillis();
 		
 		try {
 			dataReader = new BufferedReader(new FileReader(testData));
@@ -223,13 +273,13 @@ public class PIT2015 {
 				
 				float labelValue = LABEL_TYPE.get(label);
 				if(labelValue >= PairData.LABEL_PARAPHRASE06) {
-					if(estimation >= 0.5f)
+					if(estimation >= LABEL_PREDICTION_BORDER)
 						truePositives++;
 					else if(estimation < PairData.LABEL_DEBATABLE)
 						falseNegatives++;
 				}
 				else if( labelValue < PairData.LABEL_DEBATABLE ) {
-					if(estimation >= 0.5f)
+					if(estimation >= LABEL_PREDICTION_BORDER)
 						falsePositives++;
 				}
 				
@@ -255,7 +305,13 @@ public class PIT2015 {
 			float recall = truePositives / (float)(truePositives+falseNegatives);
 			float f1 = 2 * precision * recall / (precision + recall);
 			
-			System.out.println(String.format("%.3f\t%.3f\t%.3f", f1, precision, recall));
+			System.out.println(
+					String.format(
+							"%.3f\t%.3f\t%.3f\ttime:%.3f",
+							f1,
+							precision,
+							recall,
+							(System.currentTimeMillis()-start)/1000f ));
 			
 			Histogram hEstimations = new Histogram(estimations, 200);
 //			Histogram hLabels = new Histogram(labels, 200);
@@ -306,7 +362,7 @@ public class PIT2015 {
 				
 				//838	STAN	01_regrrun		0.612	0.625	0.600		0.525	0.627	0.573	0.691 with regression and (estimation > 0.4f ? true :false) on test.data
 				double estimation = estimate(x);
-				String resultLabel = (estimation > 0.4 ? "true" : "false");
+				String resultLabel = (estimation >= LABEL_PREDICTION_BORDER ? "true" : "false");
 				String resultScore = 
 						String.format(
 								Locale.US, "%.4f",
@@ -394,6 +450,8 @@ public class PIT2015 {
 		command.add(DIRNAME_OUTPUT + File.separator + testFile.getName());
 		command.add(DIRNAME_OUTPUT + File.separator + outputFile.getName());
 		
+		long start = System.currentTimeMillis();
+
 		Process p = new ProcessBuilder(command).start();
 		BufferedReader reader = new BufferedReader( new InputStreamReader(p.getInputStream()) );
 		String line;
@@ -405,6 +463,8 @@ public class PIT2015 {
 		while( (line=reader.readLine()) != null )
 			System.out.println(line);
 		reader.close();
+		
+		System.out.println("evaluated in " + (System.currentTimeMillis() - start) + " ms.");
 	}
 	
 /*	public static void exportDevLabels() throws IOException {
