@@ -99,23 +99,24 @@ public class ClusteringKMeansModel implements IMLModel {
 		double positiveWeights = 0;
 		double negativeWeights = 0;
 		for(int i=0; i<membershipWeights.length; ++i) {
-			if( _clusterInfos.get(i)._label >= PairData.LABEL_PARAPHRASE06 )
+//			if( _clusterInfos.get(i)._label >= PairData.LABEL_PARAPHRASE06 )
 				positiveWeights += membershipWeights[i];
-			else
-				negativeWeights += membershipWeights[i];
+//			else
+//				negativeWeights += membershipWeights[i];
 		}
 		
 		double positiveEstimation = 0;
 		double negativeEstimation = 0;
 		
 		for(int i=0; i<membershipWeights.length; ++i) {
-			if( _clusterInfos.get(i)._label >= 0.6 )
+//			if( _clusterInfos.get(i)._label >= 0.6 )
 				positiveEstimation += ( (membershipWeights[i]/positiveWeights) * _clusterInfos.get(i)._label);
-			else
-				negativeEstimation += ( (membershipWeights[i]/negativeWeights) * _clusterInfos.get(i)._label);
+//			else
+//				negativeEstimation += ( (membershipWeights[i]/negativeWeights) * _clusterInfos.get(i)._label);
 		}
 		
-		return positiveWeights > negativeWeights ? positiveEstimation : negativeEstimation;
+//		return positiveWeights > negativeWeights ? positiveEstimation : negativeEstimation;
+		return positiveEstimation;
 	}
 	
 	protected ClusterInfo makeClassInfo(Cluster<Observation> cluster) {
