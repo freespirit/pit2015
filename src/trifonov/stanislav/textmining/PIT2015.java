@@ -3,18 +3,32 @@ package trifonov.stanislav.textmining;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.channels.SeekableByteChannel;
+import java.nio.channels.FileChannel.MapMode;
+import java.nio.file.Files;
+import java.nio.file.OpenOption;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
-
 import java.util.Set;
 
 import com.medallia.word2vec.Word2VecModel;
@@ -39,7 +53,8 @@ import trifonov.stanislav.textmining.feature.FeaturesExtractor;
  *
  */
 public class PIT2015 {
-	private static final float LABEL_PREDICTION_BORDER = 0.35f;
+	private static final float LABEL_PREDICTION_BORDER = 0.5f;
+	private final static long ONE_GB = 1024 * 1024 * 1024;
 
 	public static void main(String[] args) throws IOException, InterruptedException {		
 			File fileTrain = new File(DIRNAME_DATA, FILENAME_TRAIN);
@@ -53,8 +68,8 @@ public class PIT2015 {
 
 			Map<String, IMLModel> models = new HashMap<String, IMLModel>();
 			models.put( "regrrun", new RegressionModel() );
-//			for(int k=4; k<=4; ++k)
-//				models.put( k+"means", new ClusteringKMeansModel(k, 1.1) );
+			for(int k=4; k<=4; ++k)
+				models.put( k+"means", new ClusteringKMeansModel(k, 1.1) );
 			
 			for(Entry<String, IMLModel> entry : models.entrySet()) {
 				System.out.println();
@@ -98,7 +113,8 @@ public class PIT2015 {
     private IMLModel _model;
     private FeaturesExtractor _featuresExtractor;
 	private final List<PairData> _trainingPairData = new ArrayList<PairData>();
-	private Word2VecModel _w2vModel;
+//	private Word2VecModel _w2vModel;
+	private Map<String, float[]> _word2vecs;
 	
 	public PIT2015() {
 		LABEL_TYPE.put("(5, 0)", PairData.LABEL_PARAPHRASE10);
@@ -132,15 +148,16 @@ public class PIT2015 {
 	
 	private PairData pairData(String s1Tags, String s2Tags, String label) throws IOException {
 		if(_featuresExtractor == null)
-			_featuresExtractor = new FeaturesExtractor(s1Tags, s2Tags, _w2vModel);
+//			_featuresExtractor = new FeaturesExtractor(s1Tags, s2Tags, _w2vModel);
+			_featuresExtractor = new FeaturesExtractor(s1Tags, s2Tags, _word2vecs);
 		else
 			_featuresExtractor.init(s1Tags, s2Tags);
 		
 		List<Feature> features = new ArrayList<Feature>();
-//		features.add(_featuresExtractor.getWordOrderSimilarity());
-//		features.add(_featuresExtractor.getSemanticSimilarity());
-//		features.add(_featuresExtractor.getWord2VecFeature());
-//		features.add(_featuresExtractor.getW2VSSFeature());
+		features.add(_featuresExtractor.getWordOrderSimilarity());
+		features.add(_featuresExtractor.getSemanticSimilarity());
+		features.add(_featuresExtractor.getWord2VecFeature());
+		features.add(_featuresExtractor.getW2VSSFeature());
 		features.add(_featuresExtractor.getW2VCosSimFeature());
 		
 //		features.add(_featuresExtractor.get1gramPrecision());
@@ -167,6 +184,97 @@ public class PIT2015 {
 		return new PairData(LABEL_TYPE.get(label), features);
 	}
 	
+	public Map<String, float[]> load_word2vec_fromFile(Collection<String> words) throws IOException {
+		Map<String, float[]> word2vecs = new HashMap<String, float[]>();
+		
+		File inFile = new File(
+				"/Volumes/storage/development/word2vec_stuff",
+				"GoogleNews-vectors-negative300.bin");
+		
+		FileInputStream is = null;
+		try {
+			is = new FileInputStream(inFile);
+			final FileChannel channel = is.getChannel();
+			MappedByteBuffer buffer = channel.map(MapMode.READ_ONLY, 0, Integer.MAX_VALUE);
+			buffer.order(ByteOrder.LITTLE_ENDIAN);
+			int bufferCount = 1;
+			
+			StringBuilder sb = new StringBuilder();
+			char c = (char) buffer.get();
+			while (c != '\n') {
+				sb.append(c);
+				c = (char) buffer.get();
+			}
+			
+			String firstLine = sb.toString();
+			int index = firstLine.indexOf(' ');
+	
+			final int vocabSize = Integer.parseInt(firstLine.substring(0, index));
+			final int layerSize = Integer.parseInt(firstLine.substring(index + 1));
+			
+			System.out.println( vocabSize + " " + layerSize);
+
+			final float[] floats = new float[layerSize];
+			long start = System.currentTimeMillis();
+			
+			for(int lineNumber = 0; lineNumber < vocabSize; ++lineNumber) {
+				sb.setLength(0);
+				c = (char) buffer.get();
+				while (c != ' ') {
+					// ignore newlines in front of words (some binary files have newline,
+					// some don't)
+					if (c != '\n') {
+						sb.append(c);
+					}
+					c = (char) buffer.get();
+				}
+				
+				// read vector
+				final FloatBuffer floatBuffer = buffer.asFloatBuffer();
+				floatBuffer.get(floats);
+				buffer.position(buffer.position() + 4 * layerSize);
+				
+				if( words.contains(sb.toString()) ) {
+					String word = sb.toString();
+					float[] word2vec = Arrays.copyOf(floats, floats.length);
+					word2vecs.put(word, word2vec);
+				}
+				
+				// remap file
+				if (buffer.position() > ONE_GB) {
+					final int newPosition = (int) (buffer.position() - ONE_GB);
+					final long size = Math.min(channel.size() - ONE_GB * bufferCount, Integer.MAX_VALUE);
+					System.out.println(
+							String.format(
+									"Reading gigabyte #%d. Start: %d, size: %d",
+									bufferCount,
+									ONE_GB * bufferCount,
+									size));
+					buffer = channel.map( FileChannel.MapMode.READ_ONLY, ONE_GB * bufferCount, size);
+					buffer.order(ByteOrder.LITTLE_ENDIAN);
+					buffer.position(newPosition);
+					bufferCount += 1;
+				}
+			}
+			
+			System.out.println("Loading " + words.size() + " word2vecs took " + (System.currentTimeMillis()-start) + "ms.");
+			System.out.println("" + word2vecs.size() + " word2vecs found");
+		}
+		finally {
+			is.close();
+		}
+		
+		return word2vecs;
+	}
+	
+	
+	/**
+	 * Quite useles as it only trains the model on the existing words (which aren't a lot in this task)
+	 * And using a pretrained model is impossible, due to the large amount of memory required
+	 * @param dataFile
+	 * @throws IOException
+	 * @throws InterruptedException
+	 */
 	public void initW2VModel(File dataFile) throws IOException, InterruptedException {
 		BufferedReader reader = null;
 		try {
@@ -178,7 +286,8 @@ public class PIT2015 {
 				String[] columns = lineInFile.split("\t");
 				String tags1 = columns[COLUMN_INDEX_SENT1TAG];
 				String tags2 = columns[COLUMN_INDEX_SENT2TAG];
-				
+
+				//Lazy, just reuse the old code used for training
 				String tags[] = tags1.split(" ");
 				List<String> sentence1 = new ArrayList<String>(tags.length);
 				for(int i=0; i<tags.length; ++i)
@@ -192,7 +301,15 @@ public class PIT2015 {
 				sentences.add(sentence2);
 			}
 			
-			_w2vModel = Word2VecModel.trainer().train(sentences);
+//			_w2vModel = Word2VecModel.trainer().train(sentences);
+			//Lazy, just reuse the old code used for training
+			Set<String> words = new HashSet<String>();
+			for(List<String> sentence : sentences)
+				for(String word : sentence)
+					words.add(word);
+			
+			_word2vecs = load_word2vec_fromFile(words);
+			
 		}
 		finally {
 			reader.close();

@@ -4,14 +4,12 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
 
 import com.google.common.collect.ImmutableList;
-import com.medallia.word2vec.Searcher;
-import com.medallia.word2vec.Searcher.UnknownWordException;
-import com.medallia.word2vec.Word2VecModel;
 
 import opennlp.tools.stemmer.PorterStemmer;
 import opennlp.tools.stemmer.Stemmer;
@@ -21,7 +19,7 @@ public class FeaturesExtractor {
 //	private static final String WORD2VEC_BIN_GOOGLE_NEWS = "GoogleNews-vectors-negative300.bin";
 //	private static final String WORD2VEC_BIN_PATH = "/Volumes/storage/development/word2vec_stuff";
 	
-	private final Word2VecModel _word2vecModel;
+//	private final Word2VecModel _word2vecModel;
 	
 	public String _sentence1Tags;
 	public String _sentence2Tags;
@@ -34,10 +32,11 @@ public class FeaturesExtractor {
 	
 	private List<String> _s1POSTags = new ArrayList<String>();
 	private List<String> _s2POSTags = new ArrayList<String>();
+	private final Map<String, float[]> _word2vecs;
 	
-	
-	public FeaturesExtractor(String tags1, String tags2, Word2VecModel word2vecModel) {
-		_word2vecModel = word2vecModel;
+	public FeaturesExtractor(String tags1, String tags2, Map<String, float[]> word2vecs/*Word2VecModel word2vecModel*/) {
+//		_word2vecModel = word2vecModel;
+		_word2vecs = word2vecs;
 		
 		init(tags1, tags2);
 	}
@@ -150,6 +149,23 @@ public class FeaturesExtractor {
 			return dotProduct / (float)(Math.sqrt(magnitudeA) * Math.sqrt(magnituteB));
 	}
 	
+	private float cosineSimilarity(float[] a, float[] b) {
+		int dotProduct = 0;
+		int magnitudeA = 0;
+		int magnituteB = 0;
+		
+		for(int i=0; i<a.length; ++i) {
+			dotProduct += a[i] * b[i];
+			magnitudeA += a[i] * a[i];
+			magnituteB += b[i] * b[i];
+		}
+		
+		if(magnitudeA == 0 || magnituteB == 0)
+			return 0;
+		else
+			return dotProduct / (float)(Math.sqrt(magnitudeA) * Math.sqrt(magnituteB));
+	}
+	
 	private double cosineSimilarity(double[] a, double[] b) {
 		double dotProduct = 0;
 		double magnitudeS1 = 0;
@@ -189,20 +205,20 @@ public class FeaturesExtractor {
 			return dotProduct / (magnitudeA*magnitudeB);
 	}
 	
-	private double maxW2VSimilarity(String word, String posTag, List<String> words, List<String> posTags, Searcher searcher) {
+	private double maxW2VSimilarity(String word, String posTag, List<String> words, List<String> posTags) {
 		double maxSimilarity = 0;
 		
 		for(int i=0; i<words.size(); ++i) {
 			if( !posTags.get(i).equals(posTag) )
 				continue;
 			
-			String candidateWord = words.get(i);
 			double similarity = 0;
-			try {
-				similarity = searcher.cosineDistance(word, candidateWord);
-			} catch (UnknownWordException e) {
-				similarity = Math.random();
+			String candidateWord = words.get(i);
+			if(_word2vecs.containsKey(words) && _word2vecs.containsKey(candidateWord)) {
+				similarity = cosineSimilarity(_word2vecs.get(word), _word2vecs.get(candidateWord));
 			}
+			else
+				similarity = Math.random();
 			
 			if(similarity > maxSimilarity)
 				maxSimilarity = similarity;
@@ -219,24 +235,25 @@ public class FeaturesExtractor {
 	 * @return
 	 */
 	public Feature getW2VSSFeature() {
-		Searcher searcher = _word2vecModel.forSearch();
 		double s1SimSum = 0;
 		double s2SimSum = 0;
 		
 		for(int i=0; i<_s1Words.size(); ++i) {
 			String wordS1 = _s1Words.get(i);
 			String posTag = _s1POSTags.get(i);
-			s1SimSum += maxW2VSimilarity(wordS1, posTag, _s2Words, _s2POSTags, searcher);
+			s1SimSum += maxW2VSimilarity(wordS1, posTag, _s2Words, _s2POSTags);
 		}
 		
 		for(int i=0; i<_s2Words.size(); ++i) {
 			String wordS2 = _s2Words.get(i);
 			String posTag = _s2POSTags.get(i);
-			s2SimSum += maxW2VSimilarity(wordS2, posTag, _s1Words, _s1POSTags, searcher);
+			s2SimSum += maxW2VSimilarity(wordS2, posTag, _s1Words, _s1POSTags);
 		}
 		
+		double lambda = 0.8;
 		double score = (s1SimSum + s2SimSum) / (_s1Words.size() + _s2Words.size());
-		return new Feature( "semw2v", score );
+		double wo = wordOrderSimilarity();
+		return new Feature( "semw2v", lambda*score + (1-lambda)*wo);
 	}
 	
 	/**
@@ -247,7 +264,6 @@ public class FeaturesExtractor {
 	 * @return 
 	 */
 	public Feature getW2VCosSimFeature() {
-		Searcher searcher = _word2vecModel.forSearch();
 		List<String> allWords = new ArrayList<String>();
 		List<String> allTags = new ArrayList<String>();
 		
@@ -270,8 +286,8 @@ public class FeaturesExtractor {
 		double[] b = new double[allWords.size()];
 		
 		for(int i=0; i<allWords.size(); ++i) {
-			a[i] = maxW2VSimilarity(allWords.get(i), allTags.get(i), _s1Words, _s1POSTags, searcher);
-			b[i] = maxW2VSimilarity(allWords.get(i), allTags.get(i), _s2Words, _s2POSTags, searcher);
+			a[i] = maxW2VSimilarity(allWords.get(i), allTags.get(i), _s1Words, _s1POSTags);
+			b[i] = maxW2VSimilarity(allWords.get(i), allTags.get(i), _s2Words, _s2POSTags);
 		}
 		
 		double score = cosineSimilarity(a, b);
@@ -279,8 +295,6 @@ public class FeaturesExtractor {
 	}
 	
 	public Feature getWord2VecFeature() throws IOException {
-		Searcher searcher = _word2vecModel.forSearch();
-
 //		double[] s1Average = words2AverageVector(_s1Words, searcher);
 //		double[] s2Average = words2AverageVector(_s2Words, searcher);
 //
@@ -303,17 +317,19 @@ public class FeaturesExtractor {
 		
 		List<RealVector> s1Vectors = new ArrayList<RealVector>(allWords.size());
 		List<RealVector> s2Vectors = new ArrayList<RealVector>(allWords.size());
-		double[] values = new double[100];
-		double[] zeros = new double[100];
+		double[] values = new double[300]; //ugly - that's the size of the word2vec
+		double[] zeros = new double[300];
 		
 		for(int i=0; i<allWords.size(); ++i) {
-			try {
-				ImmutableList<Double> w2v = searcher.getRawVector(allWords.get(i));
-				for(int j=0; j<100; ++j)
-					values[i] = w2v.get(j).doubleValue();
-			} catch (UnknownWordException e) {
-				Arrays.fill(values, 0d);
+			if(_word2vecs.containsKey(allWords.get(i))) {
+				float[] w2v = _word2vecs.get(allWords.get(i));
+				for(int j=0; j<values.length; ++j)
+					values[j] = w2v[j];
 			}
+			else
+				Arrays.fill(values, Math.random());
+			
+				
 			
 			if( _s1Words.contains(allWords.get(i)) )
 				s1Vectors.add( new ArrayRealVector(values) );
@@ -329,19 +345,19 @@ public class FeaturesExtractor {
 		return new Feature( "word2vec_cossim", cosineSimilarity(s1Vectors, s2Vectors) );
 	}
 	
-	private List<RealVector> getWV(List<String> words, Searcher searcher) {
+	private List<RealVector> getWV(List<String> words) {
 		List<RealVector> wordVectors = new ArrayList<RealVector>();
 		
 		double[] values = new double[100];
 		
 		for(String word : words) {
-			try {
-				ImmutableList<Double> w2v = searcher.getRawVector(word);
+			if(_word2vecs.containsKey(word)) {
+				float[] w2v = _word2vecs.get(word);
 				for(int i=0; i<100; ++i)
-					values[i] = w2v.get(i).doubleValue();
-			} catch (UnknownWordException e) {
-				Arrays.fill(values, 0d);
+					values[i] = w2v[i];
 			}
+			else
+				Arrays.fill(values, 0d);
 			
 			wordVectors.add( new ArrayRealVector(values) );
 		}
@@ -349,28 +365,28 @@ public class FeaturesExtractor {
 		return wordVectors;
 	}
 	
-	private double[] words2AverageVector(List<String> words, Searcher searcher) {
-		List<ImmutableList<Double>> wordVectors = new ArrayList<ImmutableList<Double>>();
+	private double[] words2AverageVector(List<String> words) {
+		List<float[]> wordVectors = new ArrayList<float[]>();
 		int maxVectorSize = 0;
 		
 		for(String word : words)
-			try {
-				ImmutableList<Double> vector = searcher.getRawVector(word);
-				if(vector.size() > maxVectorSize)
-					maxVectorSize = vector.size();
+			if(_word2vecs.containsKey(word)) {
+				float[] vector = _word2vecs.get(word);
+				if(vector.length > maxVectorSize)
+					maxVectorSize = vector.length;
 				wordVectors.add(vector);
 //				System.out.println("\t" + word + " - " + searcher.getRawVector(word).toString());
-			} catch (UnknownWordException e) {
-//				System.out.print(word + " ");//not found in word2vec model
 			}
+//			else
+//				System.out.print(word + " ");//not found in word2vec model
 
 //		System.out.println(maxVectorSize);
 		double[] averageVector = new double[maxVectorSize];
 		wordVectors.forEach(
-					(ImmutableList<Double> vector) ->
+					(float[] vector) ->
 					{
-						for(int i=0; i<vector.size(); ++i)
-							averageVector[i] = averageVector[i] + vector.get(i).doubleValue() /*/ (double)wordVectors.size()*/;
+						for(int i=0; i<vector.length; ++i)
+							averageVector[i] = averageVector[i] + vector[i] /*/ (double)wordVectors.size()*/;
 					}
 				);
 		
