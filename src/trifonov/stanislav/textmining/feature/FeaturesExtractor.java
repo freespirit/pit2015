@@ -9,18 +9,11 @@ import java.util.Map;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
 
-import com.google.common.collect.ImmutableList;
-
 import opennlp.tools.stemmer.PorterStemmer;
 import opennlp.tools.stemmer.Stemmer;
 
 public class FeaturesExtractor {
 
-//	private static final String WORD2VEC_BIN_GOOGLE_NEWS = "GoogleNews-vectors-negative300.bin";
-//	private static final String WORD2VEC_BIN_PATH = "/Volumes/storage/development/word2vec_stuff";
-	
-//	private final Word2VecModel _word2vecModel;
-	
 	public String _sentence1Tags;
 	public String _sentence2Tags;
 	
@@ -34,8 +27,7 @@ public class FeaturesExtractor {
 	private List<String> _s2POSTags = new ArrayList<String>();
 	private final Map<String, float[]> _word2vecs;
 	
-	public FeaturesExtractor(String tags1, String tags2, Map<String, float[]> word2vecs/*Word2VecModel word2vecModel*/) {
-//		_word2vecModel = word2vecModel;
+	public FeaturesExtractor(String tags1, String tags2, Map<String, float[]> word2vecs) {
 		_word2vecs = word2vecs;
 		
 		init(tags1, tags2);
@@ -345,6 +337,7 @@ public class FeaturesExtractor {
 		return new Feature( "word2vec_cossim", cosineSimilarity(s1Vectors, s2Vectors) );
 	}
 	
+	@Deprecated
 	private List<RealVector> getWV(List<String> words) {
 		List<RealVector> wordVectors = new ArrayList<RealVector>();
 		
@@ -365,6 +358,7 @@ public class FeaturesExtractor {
 		return wordVectors;
 	}
 	
+	@Deprecated
 	private double[] words2AverageVector(List<String> words) {
 		List<float[]> wordVectors = new ArrayList<float[]>();
 		int maxVectorSize = 0;

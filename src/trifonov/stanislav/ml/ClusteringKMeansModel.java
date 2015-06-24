@@ -129,22 +129,18 @@ public class ClusteringKMeansModel implements IMLModel {
 		}
 		
 		int maxOccurences = Integer.MIN_VALUE;
-		float dominantLabel = Float.MIN_VALUE;
 		label = 0f;
 		float entropy = 0;
 		
 		for(Map.Entry<Float, Integer> entry : classOccurrences.entrySet()) {
-			if(entry.getValue() > maxOccurences) {
+			if(entry.getValue() > maxOccurences)
 				maxOccurences = entry.getValue();
-				dominantLabel = entry.getKey();
-			}
 			label += entry.getKey() * entry.getValue() / (double)cluster.getPoints().size();
 			double p = entry.getValue() / (double)cluster.getPoints().size();
 			entropy -= p * log2(p);
 		}
 		
 		return new ClusterInfo(
-//				dominantLabel,
 				label,
 				maxOccurences / (double)cluster.getPoints().size(),
 				entropy );

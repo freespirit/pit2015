@@ -8,18 +8,11 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.channels.SeekableByteChannel;
 import java.nio.channels.FileChannel.MapMode;
-import java.nio.file.Files;
-import java.nio.file.OpenOption;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -31,7 +24,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
-import com.medallia.word2vec.Word2VecModel;
 import com.xeiam.xchart.BitmapEncoder;
 import com.xeiam.xchart.Chart;
 import com.xeiam.xchart.ChartBuilder;
@@ -53,7 +45,7 @@ import trifonov.stanislav.textmining.feature.FeaturesExtractor;
  *
  */
 public class PIT2015 {
-	private static final float LABEL_PREDICTION_BORDER = 0.5f;
+	private static final float LABEL_PREDICTION_BORDER = 0.4f;
 	private final static long ONE_GB = 1024 * 1024 * 1024;
 
 	public static void main(String[] args) throws IOException, InterruptedException {		
@@ -97,8 +89,11 @@ public class PIT2015 {
 	public static final String FILENAME_TEST = "test.data";
 	public static final String FILENAME_TEST_LABEL = "test.label";
 	public static final String FILENAME_TOKENIZER_MODEL = "en-token.bin";
+	public static final String FILENAME_WORD2VEC_BIN = "GoogleNews-vectors-negative300.bin";
+	
 	public static final String DIRNAME_DATA = "../SemEval-PIT2015-github/data";
 	public static final String DIRNAME_OUTPUT = "../output";
+	public static final String DIRNAME_WORD2VEC_LOCATION = "/Volumes/storage/development/word2vec_stuff";
 
 	public static final int COLUMN_INDEX_TOPICID = 0;
 	public static final int COLUMN_INDEX_TOPIC = 1;
@@ -113,7 +108,6 @@ public class PIT2015 {
     private IMLModel _model;
     private FeaturesExtractor _featuresExtractor;
 	private final List<PairData> _trainingPairData = new ArrayList<PairData>();
-//	private Word2VecModel _w2vModel;
 	private Map<String, float[]> _word2vecs;
 	
 	public PIT2015() {
@@ -148,7 +142,6 @@ public class PIT2015 {
 	
 	private PairData pairData(String s1Tags, String s2Tags, String label) throws IOException {
 		if(_featuresExtractor == null)
-//			_featuresExtractor = new FeaturesExtractor(s1Tags, s2Tags, _w2vModel);
 			_featuresExtractor = new FeaturesExtractor(s1Tags, s2Tags, _word2vecs);
 		else
 			_featuresExtractor.init(s1Tags, s2Tags);
@@ -160,26 +153,26 @@ public class PIT2015 {
 		features.add(_featuresExtractor.getW2VSSFeature());
 		features.add(_featuresExtractor.getW2VCosSimFeature());
 		
-//		features.add(_featuresExtractor.get1gramPrecision());
-//		features.add(_featuresExtractor.get1gramRecall());
-//		features.add(_featuresExtractor.get1gramF1());
-//		features.add(_featuresExtractor.get1gramStemPrecision());
-//		features.add(_featuresExtractor.get1gramStemRecall());
-//		features.add(_featuresExtractor.get1gramStemF1());
-//		
-//		features.add(_featuresExtractor.get2gramPrecision());
-//		features.add(_featuresExtractor.get2gramRecall());
-//		features.add(_featuresExtractor.get2gramF1());
-//		features.add(_featuresExtractor.get2gramStemPrecision());
-//		features.add(_featuresExtractor.get2gramStemRecall());
-//		features.add(_featuresExtractor.get2gramStemF1());
-//		
-//		features.add(_featuresExtractor.get3gramPrecision());
-//		features.add(_featuresExtractor.get3gramRecall());
-//		features.add(_featuresExtractor.get3gramF1());
-//		features.add(_featuresExtractor.get3gramStemPrecision());
-//		features.add(_featuresExtractor.get3gramStemRecall());
-//		features.add(_featuresExtractor.get3gramStemF1());
+		features.add(_featuresExtractor.get1gramPrecision());
+		features.add(_featuresExtractor.get1gramRecall());
+		features.add(_featuresExtractor.get1gramF1());
+		features.add(_featuresExtractor.get1gramStemPrecision());
+		features.add(_featuresExtractor.get1gramStemRecall());
+		features.add(_featuresExtractor.get1gramStemF1());
+		
+		features.add(_featuresExtractor.get2gramPrecision());
+		features.add(_featuresExtractor.get2gramRecall());
+		features.add(_featuresExtractor.get2gramF1());
+		features.add(_featuresExtractor.get2gramStemPrecision());
+		features.add(_featuresExtractor.get2gramStemRecall());
+		features.add(_featuresExtractor.get2gramStemF1());
+		
+		features.add(_featuresExtractor.get3gramPrecision());
+		features.add(_featuresExtractor.get3gramRecall());
+		features.add(_featuresExtractor.get3gramF1());
+		features.add(_featuresExtractor.get3gramStemPrecision());
+		features.add(_featuresExtractor.get3gramStemRecall());
+		features.add(_featuresExtractor.get3gramStemF1());
 		
 		return new PairData(LABEL_TYPE.get(label), features);
 	}
@@ -188,8 +181,8 @@ public class PIT2015 {
 		Map<String, float[]> word2vecs = new HashMap<String, float[]>();
 		
 		File inFile = new File(
-				"/Volumes/storage/development/word2vec_stuff",
-				"GoogleNews-vectors-negative300.bin");
+				DIRNAME_WORD2VEC_LOCATION,
+				FILENAME_WORD2VEC_BIN );
 		
 		FileInputStream is = null;
 		try {
@@ -269,8 +262,7 @@ public class PIT2015 {
 	
 	
 	/**
-	 * Quite useles as it only trains the model on the existing words (which aren't a lot in this task)
-	 * And using a pretrained model is impossible, due to the large amount of memory required
+	 * Simply read the bin file and load the vectors for each word found in the corpus (all tweets)
 	 * @param dataFile
 	 * @throws IOException
 	 * @throws InterruptedException
@@ -280,33 +272,19 @@ public class PIT2015 {
 		try {
 			reader = new BufferedReader( new FileReader(dataFile) );
 			String lineInFile = null;
-			Set<List<String>> sentences = new HashSet<List<String>>();
+			Set<String> words = new HashSet<String>();
 			
 			while( (lineInFile=reader.readLine()) != null ) {
 				String[] columns = lineInFile.split("\t");
-				String tags1 = columns[COLUMN_INDEX_SENT1TAG];
-				String tags2 = columns[COLUMN_INDEX_SENT2TAG];
 
-				//Lazy, just reuse the old code used for training
-				String tags[] = tags1.split(" ");
-				List<String> sentence1 = new ArrayList<String>(tags.length);
+				String tags[] = columns[COLUMN_INDEX_SENT1TAG].split(" ");
 				for(int i=0; i<tags.length; ++i)
-					sentence1.add( tags[i].substring(0, tags[i].indexOf('/')) );
-				sentences.add(sentence1);
+					words.add( tags[i].substring(0, tags[i].indexOf('/')) );
 				
-				tags = tags2.split(" ");
-				List<String> sentence2 = new ArrayList<String>(tags.length);
+				tags = columns[COLUMN_INDEX_SENT2TAG].split(" ");
 				for(int i=0; i<tags.length; ++i)
-					sentence2.add( tags[i].substring(0, tags[i].indexOf('/')) );
-				sentences.add(sentence2);
+					words.add( tags[i].substring(0, tags[i].indexOf('/')) );
 			}
-			
-//			_w2vModel = Word2VecModel.trainer().train(sentences);
-			//Lazy, just reuse the old code used for training
-			Set<String> words = new HashSet<String>();
-			for(List<String> sentence : sentences)
-				for(String word : sentence)
-					words.add(word);
 			
 			_word2vecs = load_word2vec_fromFile(words);
 			
@@ -523,7 +501,6 @@ public class PIT2015 {
 			
 			for(PairData pd : pairsData) {
 				Feature f = pd.getFeature(key);
-				float value = f._featureValue.floatValue();
 				if(pd.getLabel() > PairData.LABEL_PARAPHRASE06)
 					featureValuesForParaphrases.add(f._featureValue);
 				else if(pd.getLabel() < PairData.LABEL_DEBATABLE)
